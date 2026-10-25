@@ -4,10 +4,14 @@ import Foundation
 import SwiftUI
 
 /// The conversation loop:
-/// mic → VAD → (you stop talking) → Parakeet → oMLX stream → sentence chunks → Kokoro → speaker.
+/// mic → VAD → (you pause) → Parakeet → oMLX stream → sentence chunks → Kokoro → speaker.
+/// The reply is drafted during your pause and released once the pause is long enough.
 /// If you start talking while the assistant is thinking or speaking, it stops (barge-in).
 @MainActor
 final class VoiceSession: ObservableObject {
+    /// One session for the main window, the floating orb, the menu bar and the hotkey.
+    static let shared = VoiceSession()
+
     enum Phase: Equatable {
         case loading(String)
         case ready
@@ -19,17 +23,39 @@ final class VoiceSession: ObservableObject {
         case failed(String)
     }
 
-    struct Line: Identifiable {
-        let id = UUID()
+    struct Line: Identifiable, Codable {
+        var id = UUID()
         let role: String
         var text: String
         var interrupted = false
+        /// Small print under the message: tools used, screen shared.
+        var note: String?
+    }
+
+    struct VisionUnavailable: LocalizedError {
+        let model: String
+        var errorDescription: String? {
+            "\(model) can't see images. Pick a vision model (like gemma-4-26b-a4b) to ask about your screen."
+        }
+    }
+
+    /// Attach a screenshot to the next message (the eye button).
+    @Published var attachScreenNext = false
+
+    var currentModelSeesImages: Bool {
+        models.first { $0.id == modelID }?.isVision ?? false
     }
 
     @Published var phase: Phase = .loading("Starting…")
     @Published var lines: [Line] = []
+    @Published var savedConversations: [ConversationStore.Summary] = []
+    private var conversationID = UUID()
+    private var conversationCreated = Date()
+    private let store = ConversationStore()
     @Published var models: [OMLXClient.Model] = []
     @Published var lastLatencyMs: Int?
+    /// What you're saying right now, re-transcribed every half second while you talk.
+    @Published var liveText: String?
     /// Mic problems are shown here instead of `.failed`, so Start stays usable for a retry.
     @Published var micNotice: String?
 
@@ -38,12 +64,44 @@ final class VoiceSession: ObservableObject {
     @AppStorage("speed") var speed = 1.05
     @AppStorage("endOfTurnMs") var endOfTurnMs = 600
     @AppStorage("systemPrompt") var systemPrompt = VoiceSession.defaultPrompt
+    /// Keep the chosen model pinned in oMLX so it's never unloaded (no 10 s+ reloads).
+    /// Off by default: on a 24 GB Mac a pinned model can leave no room for any other.
+    @AppStorage("keepModelLoaded") var keepModelLoaded = false
+    /// Text-only replies: nothing is spoken aloud.
+    @AppStorage("muteReplies") var muteReplies = false
+    /// Reply in whatever language you speak (detected per message).
+    @AppStorage("matchLanguage") var matchLanguage = true
+    /// Let the model search the web, check the time and open apps/pages.
+    @AppStorage("useTools") var useTools = true
+    @AppStorage("soundCues") var soundCues = true
+    /// Speak English replies in a voice cloned from your recording (PocketTTS).
+    @AppStorage("useMyVoice") var useMyVoice = false
+    @Published var myVoiceStatus: String?
+    @Published private(set) var myVoiceBusy = false
+    /// The language of the conversation so far; sticks when a message is too short to tell.
+    @Published private(set) var language = "en"
+    /// True while the microphone is on (a voice conversation is running).
+    @Published private(set) var micOn = false
+
+    /// Where things settle after a reply: listening if the mic is on, otherwise idle.
+    private var restPhase: Phase { micOn ? .listening : .ready }
+    /// The model this app pinned, so we only ever unpin our own pin.
+    @AppStorage("pinnedByApp") private var pinnedByApp = ""
 
     static let defaultPrompt = """
         You are a friendly, quick-witted voice assistant having a spoken conversation. \
         Answer in one to three short, natural sentences unless asked for more detail. \
         Never use markdown, lists, headings, code blocks or emoji: everything you write is read aloud.
         """
+
+    private var fullSystemPrompt: String {
+        var prompt = systemPrompt
+        if useTools {
+            prompt += " You can search the web, read pages, check the time and open apps or web pages with your tools; use them whenever they help, and summarise results briefly in speech."
+        }
+        if matchLanguage { prompt += " Always reply in the same language the user speaks to you in." }
+        return prompt
+    }
 
     static let voices = [
         "af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "af_nova",
@@ -79,13 +137,24 @@ final class VoiceSession: ObservableObject {
     var levels: AudioLevels { audio.levels }
     private var speech: SpeechModels?
     private var listenerTask: Task<Void, Never>?
-    private var turnTask: Task<Void, Never>?
+    private var turn: Turn?
     private var micStream: AsyncStream<[Float]>.Continuation?
     private var history: [OMLXClient.Message] = []
 
     // MARK: - Setup
 
+    private var booted = false
+
+    /// The window can be closed and reopened; load everything only the first time.
+    func bootOnce() async {
+        guard !booted else { return }
+        booted = true
+        await boot()
+    }
+
     func boot() async {
+        savedConversations = store.list()
+        if let latest = savedConversations.first { openConversation(latest.id) }
         do {
             phase = .loading("Connecting to oMLX…")
             models = try await client.chatModels()
@@ -98,6 +167,7 @@ final class VoiceSession: ObservableObject {
         }
         do {
             let warm = Task { [client, modelID] in try? await client.warmUp(model: modelID) }
+            Task { await updatePin() }
             speech = try await SpeechModels.load(voice: voice) { message in
                 Task { @MainActor in self.phase = .loading(message) }
             }
@@ -121,12 +191,120 @@ final class VoiceSession: ObservableObject {
     func modelChanged() {
         let client = client, modelID = modelID
         Task { try? await client.warmUp(model: modelID) }
+        Task { await updatePin() }
+    }
+
+    /// Pins the current model (and unpins one we pinned before), or removes our pin.
+    func updatePin() async {
+        let target = keepModelLoaded ? modelID : ""
+        guard target != pinnedByApp else { return }
+        do {
+            if !pinnedByApp.isEmpty { try await client.setPinned(false, model: pinnedByApp) }
+            if !target.isEmpty { try await client.setPinned(true, model: target) }
+            pinnedByApp = target
+        } catch {
+            micNotice = "Couldn't pin the model in oMLX: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Your own voice
+
+    static var myVoiceFolder: URL { SpeechModels.appRoot.appendingPathComponent("MyVoice", isDirectory: true) }
+    static var myVoiceFile: URL { myVoiceFolder.appendingPathComponent("voice.bin") }
+    var hasMyVoice: Bool { FileManager.default.fileExists(atPath: Self.myVoiceFile.path) }
+
+    static let voiceScript = "Hi! I'm recording my voice so my assistant can speak like me. "
+        + "I like long walks, good coffee and quiet mornings. "
+        + "Today I'll read a few calm, natural sentences, at my normal speed."
+
+    /// Records ~12 s from the mic, then learns the voice from it.
+    func recordMyVoice() async {
+        guard !myVoiceBusy else { return }
+        if micOn { stop() }
+        guard await AVCaptureDevice.requestAccess(for: .audio) else {
+            myVoiceStatus = Self.deniedNotice
+            return
+        }
+        myVoiceBusy = true
+        defer { myVoiceBusy = false }
+        let sample = Self.myVoiceFolder.appendingPathComponent("sample.wav")
+        do {
+            try FileManager.default.createDirectory(at: Self.myVoiceFolder, withIntermediateDirectories: true)
+            let recorder = try AVAudioRecorder(url: sample, settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false,
+            ])
+            SoundCues.play(.start)
+            try? await Task.sleep(for: .milliseconds(350)) // don't record the chime
+            recorder.record(forDuration: 12)
+            for remaining in stride(from: 12, to: 0, by: -1) {
+                myVoiceStatus = "Recording… \(remaining) s left. Read the text above aloud."
+                try? await Task.sleep(for: .seconds(1))
+            }
+            while recorder.isRecording { try? await Task.sleep(for: .milliseconds(100)) }
+            SoundCues.play(.stop)
+        } catch {
+            myVoiceStatus = "Couldn't record: \(error.localizedDescription)"
+            return
+        }
+        await learnMyVoice(from: sample)
+    }
+
+    func importMyVoice(from url: URL) async {
+        guard !myVoiceBusy else { return }
+        myVoiceBusy = true
+        defer { myVoiceBusy = false }
+        await learnMyVoice(from: url)
+    }
+
+    private func learnMyVoice(from sample: URL) async {
+        guard let speech else { myVoiceStatus = "Still loading, try again in a moment."; return }
+        myVoiceStatus = "Learning your voice… (the first time downloads the voice model, ~1 min)"
+        do {
+            try FileManager.default.createDirectory(at: Self.myVoiceFolder, withIntermediateDirectories: true)
+            try await speech.tts.clone(sample: sample, to: Self.myVoiceFile)
+            useMyVoice = true
+            myVoiceStatus = "Done! Replies in English now use your voice."
+            objectWillChange.send()
+        } catch {
+            myVoiceStatus = "Couldn't learn the voice: \(error.localizedDescription)"
+        }
+    }
+
+    func deleteMyVoice() {
+        try? FileManager.default.removeItem(at: Self.myVoiceFolder)
+        useMyVoice = false
+        myVoiceStatus = nil
+        objectWillChange.send()
     }
 
     // MARK: - Conversation on/off
 
     func toggle() {
-        isActive ? stop() : start()
+        micOn ? stop() : start()
+    }
+
+    /// Sends a typed message. Works with or without the mic on; the reply is spoken
+    /// unless replies are muted.
+    func send(_ text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, speech != nil else { return }
+        if assistantBusy || audio.isPlaying { interrupt() } else { discardDraft() }
+        if !muteReplies, !audio.isRunning {
+            configureAudioCallbacks()
+            try? audio.start(withMic: false)
+        }
+        let turn = Turn(speechEndedAt: Date())
+        turn.committed = true
+        self.turn = turn
+        phase = .thinking
+        turn.task = Task { await run(turn, samples: nil, typed: text) }
+    }
+
+    private func configureAudioCallbacks() {
+        audio.onPlaybackDrained = { [weak self] in
+            Task { @MainActor in self?.playbackDrained() }
+        }
     }
 
     func start() {
@@ -156,42 +334,99 @@ final class VoiceSession: ObservableObject {
         let (stream, continuation) = AsyncStream<[Float]>.makeStream(bufferingPolicy: .bufferingNewest(200))
         micStream = continuation
         audio.onMicSamples = { continuation.yield($0) }
-        audio.onPlaybackDrained = { [weak self] in
-            Task { @MainActor in self?.playbackDrained() }
-        }
+        configureAudioCallbacks()
+        if audio.isRunning { audio.stop() } // playback-only engine from a typed message
         do {
             try audio.start()
         } catch {
             micStream?.finish()
             micNotice = "Couldn't start the microphone: \(error.localizedDescription)"
+            SoundCues.play(.error)
             return
         }
+        micOn = true
         phase = .listening
+        SoundCues.play(.start)
         listenerTask = Task.detached(priority: .userInitiated) { [weak self] in
             await Self.listen(stream: stream, vad: speech.vad, session: self)
         }
     }
 
     func stop() {
-        turnTask?.cancel()
+        liveText = nil
+        turn?.task?.cancel()
+        turn = nil
         listenerTask?.cancel()
         micStream?.finish()
         audio.stop()
+        if micOn { SoundCues.play(.stop) }
+        micOn = false
         phase = .ready
     }
 
-    func clearConversation() {
-        turnTask?.cancel()
-        audio.stopPlayback()
+    /// Starts a fresh conversation; the current one stays in the history list.
+    func newConversation() {
+        cancelTurn()
+        saveConversation()
         lines.removeAll()
         history.removeAll()
-        if isActive { phase = .listening }
+        conversationID = UUID()
+        conversationCreated = Date()
+        phase = restPhase
+    }
+
+    func openConversation(_ id: UUID) {
+        guard let conversation = store.load(id) else { return }
+        cancelTurn()
+        saveConversation()
+        conversationID = conversation.id
+        conversationCreated = conversation.created
+        lines = conversation.lines
+        // The model only needs the spoken exchange, not error notes.
+        history = conversation.lines
+            .filter { $0.role == "user" || $0.role == "assistant" }
+            .map { OMLXClient.Message(role: $0.role, content: $0.text) }
+        // At launch this runs while models load; don't clobber that status.
+        if case .loading = phase {} else { phase = restPhase }
+    }
+
+    func deleteConversation(_ id: UUID) {
+        store.delete(id)
+        if id == conversationID {
+            lines.removeAll()
+            history.removeAll()
+            conversationID = UUID()
+            conversationCreated = Date()
+        }
+        savedConversations = store.list()
+    }
+
+    /// Removes the current conversation without saving (used by `--chattest`).
+    func deleteConversationForTest() {
+        deleteConversation(conversationID)
+    }
+
+    private func saveConversation() {
+        guard lines.contains(where: { $0.role == "user" }) else { return }
+        store.save(.init(id: conversationID, created: conversationCreated, updated: Date(), lines: lines))
+        savedConversations = store.list()
+    }
+
+    private func cancelTurn() {
+        turn?.task?.cancel()
+        turn = nil
+        audio.stopPlayback()
+        liveText = nil
     }
 
     // MARK: - Listening (runs off the main thread)
 
     /// Silero works on 256 ms chunks. We keep a little audio from before speech
     /// starts so the first syllable isn't clipped.
+    ///
+    /// Turn-taking: after one silent chunk we start a draft reply (`userPaused`); if
+    /// you speak again it's thrown away (`userResumed`); once the silence lasts the
+    /// full end-of-turn time the draft becomes the real reply (`userFinished`).
     private nonisolated static func listen(stream: AsyncStream<[Float]>, vad: VadManager, session: VoiceSession?) async {
         let chunkSize = VadManager.chunkSize
         let chunkMs = 256
@@ -201,6 +436,9 @@ final class VoiceSession: ObservableObject {
         var inSpeech = false
         var speechChunks = 0
         var silenceMs = 0
+        var drafting = false
+        var chunksSincePartial = 0
+        let draftAfterMs = chunkMs
         var vadState = VadStreamState.initial()
 
         for await samples in stream {
@@ -233,13 +471,32 @@ final class VoiceSession: ObservableObject {
                     }
                 } else {
                     utterance += chunk
-                    silenceMs = probability < 0.35 ? silenceMs + chunkMs : 0
+                    chunksSincePartial += 1
+                    if chunksSincePartial >= 2 {
+                        chunksSincePartial = 0
+                        await session?.updateLiveText(utterance)
+                    }
+                    if probability < 0.35 {
+                        silenceMs += chunkMs
+                    } else if probability >= 0.5 {
+                        silenceMs = 0
+                        if drafting {
+                            drafting = false
+                            await session?.userResumed()
+                        }
+                    }
+                    let speechEnded = Date().addingTimeInterval(-Double(silenceMs) / 1000)
                     if silenceMs >= endMs {
                         inSpeech = false
+                        drafting = false
                         speechChunks = 0
                         let audio = utterance
                         utterance = []
-                        await session?.userFinished(audio, endedAt: Date())
+                        await session?.userFinished(audio, endedAt: speechEnded)
+                    } else if silenceMs >= draftAfterMs, !drafting {
+                        // A short pause: start working on the reply now, in case it's the end.
+                        drafting = true
+                        await session?.userPaused(utterance, endedAt: speechEnded)
                     }
                 }
             }
@@ -253,77 +510,190 @@ final class VoiceSession: ObservableObject {
     private func userStartedSpeaking() {
         if assistantBusy || audio.isPlaying { interrupt() }
         phase = .hearing
+        liveText = ""
     }
 
-    private func interrupt() {
-        turnTask?.cancel()
-        turnTask = nil
-        audio.stopPlayback()
-        if let last = lines.indices.last, lines[last].role == "assistant" {
-            lines[last].interrupted = true
+    private var liveTextTask: Task<Void, Never>?
+
+    /// Keeps only one partial transcription in flight; Parakeet takes ~50 ms for a few seconds of audio.
+    private func updateLiveText(_ samples: [Float]) {
+        guard liveTextTask == nil, let speech, liveText != nil else { return }
+        liveTextTask = Task {
+            let text = try? await speech.transcribe(samples)
+            liveTextTask = nil
+            if liveText != nil, let text, !text.isEmpty { liveText = text }
         }
     }
 
-    // MARK: - A turn
+    /// Barge-in: stop the assistant, keeping what it already said in the history.
+    private func interrupt() {
+        audio.stopPlayback()
+        guard let turn else { return }
+        turn.task?.cancel()
+        if turn.committed, turn.revealed {
+            if turn.generating { history.append(.init(role: "assistant", content: SentenceChunker.visible(turn.reply))) }
+            if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].interrupted = true }
+            saveConversation()
+        }
+        self.turn = nil
+    }
+
+    // MARK: - Turns
+
+    private func userPaused(_ samples: [Float], endedAt: Date) {
+        discardDraft()
+        guard samples.count > Self.minUtteranceSamples else { return }
+        startTurn(samples: samples, endedAt: endedAt, committed: false)
+    }
+
+    private func userResumed() {
+        discardDraft()
+    }
 
     private func userFinished(_ samples: [Float], endedAt: Date) {
+        if let turn, !turn.committed {
+            commit(turn)
+            return
+        }
+        guard samples.count > Self.minUtteranceSamples else {
+            liveText = nil
+            phase = .listening
+            return
+        }
+        startTurn(samples: samples, endedAt: endedAt, committed: true)
+    }
+
+    /// Ignore coughs and clicks shorter than ~0.4 s.
+    private static let minUtteranceSamples = 6_400
+
+    private func discardDraft() {
+        guard let turn, !turn.committed else { return }
+        turn.task?.cancel()
+        self.turn = nil
+    }
+
+    private func startTurn(samples: [Float], endedAt: Date, committed: Bool) {
+        let turn = Turn(speechEndedAt: endedAt)
+        turn.committed = committed
+        self.turn = turn
+        if committed { phase = .transcribing }
+        turn.task = Task { await run(turn, samples: samples, typed: nil) }
+    }
+
+    /// The draft is now the real reply: show it and release any audio it already made.
+    private func commit(_ turn: Turn) {
+        turn.committed = true
+        guard let text = turn.userText else {
+            phase = .transcribing
+            return
+        }
+        guard !text.isEmpty else { return finishEmpty(turn) }
+        reveal(turn)
+        if !turn.generating { finalize(turn) }
+    }
+
+    private func run(_ turn: Turn, samples: [Float]?, typed: String?) async {
         guard let speech else { return }
-        // Ignore coughs and clicks shorter than ~0.4 s.
-        guard samples.count > 6_400 else { phase = .listening; return }
-        phase = .transcribing
-        turnTask = Task {
-            do {
-                let text = try await speech.transcribe(samples)
-                try Task.checkCancellation()
-                guard text.count > 1 else { phase = .listening; return }
-                lines.append(Line(role: "user", text: text))
-                history.append(.init(role: "user", content: text))
-                try await respond(speech: speech, startedAt: endedAt)
-            } catch is CancellationError {
-            } catch {
-                if !Task.isCancelled {
-                    lines.append(Line(role: "error", text: error.localizedDescription))
-                    phase = .listening
-                }
+        do {
+            let text: String
+            if let typed { text = typed } else { text = try await speech.transcribe(samples ?? []) }
+            try Task.checkCancellation()
+            turn.userText = text.count > 1 ? text : ""
+            guard text.count > 1 else {
+                if turn.committed { finishEmpty(turn) }
+                return
+            }
+            if matchLanguage, let detected = LanguageDetector.detect(text) { language = detected }
+            var images: [Data] = []
+            if attachScreenNext || ScreenVision.wantsScreen(text) {
+                guard currentModelSeesImages else { throw VisionUnavailable(model: modelID) }
+                images = [try await ScreenVision.capture()]
+                turn.sharedScreen = true
+            }
+            let messages = [OMLXClient.Message(role: "system", content: fullSystemPrompt)] + history.suffix(20)
+                + [.init(role: "user", content: text, images: images)]
+            if turn.committed { reveal(turn) }
+            try await generate(turn, messages: messages, speech: speech)
+            turn.generating = false
+            if turn.committed { finalize(turn) }
+        } catch is CancellationError {
+        } catch {
+            guard !Task.isCancelled else { return }
+            turn.generating = false
+            if turn.committed {
+                lines.append(Line(role: "error", text: error.localizedDescription))
+                SoundCues.play(.error)
+                finalize(turn)
+            } else {
+                // Surface it if and when the draft gets committed.
+                turn.failure = error
             }
         }
     }
 
-    private func respond(speech: SpeechModels, startedAt: Date) async throws {
-        phase = .thinking
-        let messages = [OMLXClient.Message(role: "system", content: systemPrompt)] + history.suffix(20)
-        lines.append(Line(role: "assistant", text: ""))
-        let lineIndex = lines.count - 1
-
-        // Sentences flow from the LLM stream into the TTS loop, which runs concurrently.
+    /// Streams the reply from oMLX and speaks it sentence by sentence, running any
+    /// tools the model asks for in between. Drafts keep their audio in `heldAudio`
+    /// until committed.
+    private func generate(_ turn: Turn, messages initial: [OMLXClient.Message], speech: SpeechModels) async throws {
+        var messages = initial
         let (sentences, sentenceSink) = AsyncStream<String>.makeStream()
-        speakingTurn = true
-        defer { speakingTurn = false }
-        let voice = voice, speed = Float(speed)
+        let voice = voice, speed = Float(speed), muted = muteReplies
+        let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
+        let turnLanguage = matchLanguage ? language : "en"
         let ttsTask = Task {
-            var first = true
             for await sentence in sentences {
-                if Task.isCancelled { return }
-                guard let samples = try? await speech.speak(sentence, voice: voice, speed: speed),
+                if muted { continue }
+                // Per-sentence detection catches a reply that switches language; short ones follow the turn.
+                let sentenceLanguage = LanguageDetector.detect(sentence) ?? turnLanguage
+                guard let samples = try? await speech.speak(
+                        sentence, voice: voice, speed: speed, language: matchLanguage ? sentenceLanguage : "en",
+                        clonedVoice: clonedVoice),
                       !Task.isCancelled
-                else { continue }
-                if first {
-                    first = false
-                    lastLatencyMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-                }
-                phase = .speaking
-                audio.play(samples)
+                else { if Task.isCancelled { return } else { continue } }
+                if turn.committed { play(samples, for: turn) } else { turn.heldAudio.append(samples) }
             }
         }
 
-        var reply = ""
         var chunker = SentenceChunker()
         do {
-            for try await token in client.streamChat(model: modelID, messages: messages) {
-                try Task.checkCancellation()
-                reply += token
-                if lines.indices.contains(lineIndex) { lines[lineIndex].text = SentenceChunker.visible(reply) }
-                for sentence in chunker.push(token) { sentenceSink.yield(sentence) }
+            for round in 0..<4 {
+                var calls: [OMLXClient.ToolCall] = []
+                var roundText = ""
+                let tools = useTools && round < 3 ? Tools.definitions : []
+                for try await event in client.streamChat(model: modelID, messages: messages, tools: tools) {
+                    try Task.checkCancellation()
+                    switch event {
+                    case .text(let token):
+                        turn.reply += token
+                        roundText += token
+                        if let i = turn.lineIndex, lines.indices.contains(i) {
+                            lines[i].text = SentenceChunker.visible(turn.reply)
+                        }
+                        for sentence in chunker.push(token) { sentenceSink.yield(sentence) }
+                    case .toolCall(let call):
+                        calls.append(call)
+                    }
+                }
+                guard !calls.isEmpty else { break }
+
+                for sentence in chunker.finish() { sentenceSink.yield(sentence) }
+                chunker = SentenceChunker()
+                if turn.reply.isEmpty, let filler = calls.lazy.compactMap(Tools.filler).first,
+                   turnLanguage == "en" || !matchLanguage {
+                    sentenceSink.yield(filler)
+                }
+                messages.append(.init(role: "assistant", content: roundText, toolCalls: calls))
+                for call in calls {
+                    // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
+                    while Tools.hasSideEffects(call) && !turn.committed {
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    turn.notes.append(Tools.label(for: call))
+                    if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
+                    let result = await Tools.run(call, client: client)
+                    try Task.checkCancellation()
+                    messages.append(.init(role: "tool", content: result, toolCallID: call.id))
+                }
             }
             for sentence in chunker.finish() { sentenceSink.yield(sentence) }
             sentenceSink.finish()
@@ -335,19 +705,87 @@ final class VoiceSession: ObservableObject {
         } catch {
             sentenceSink.finish()
             ttsTask.cancel()
-            history.append(.init(role: "assistant", content: SentenceChunker.visible(reply)))
             throw error
         }
-        history.append(.init(role: "assistant", content: SentenceChunker.visible(reply)))
-        if !audio.isPlaying, phase == .thinking || phase == .speaking { phase = .listening }
     }
 
-    /// True while a reply is still being generated or synthesized, so a short gap
-    /// between two sentences doesn't count as "done speaking".
-    private var speakingTurn = false
+    /// Puts the turn on screen and into the history, and plays anything already synthesized.
+    private func reveal(_ turn: Turn) {
+        guard !turn.revealed, let text = turn.userText else { return }
+        turn.revealed = true
+        liveText = nil
+        lines.append(Line(role: "user", text: text, note: turn.sharedScreen ? "Shared your screen" : nil))
+        if turn.sharedScreen { attachScreenNext = false }
+        history.append(.init(role: "user", content: turn.sharedScreen ? text + " [screenshot attached]" : text))
+        lines.append(Line(role: "assistant", text: SentenceChunker.visible(turn.reply),
+                          note: turn.notes.isEmpty ? nil : turn.notes.joined(separator: " · ")))
+        turn.lineIndex = lines.count - 1
+        if let failure = turn.failure {
+            lines.append(Line(role: "error", text: failure.localizedDescription))
+        }
+        phase = .thinking
+        for samples in turn.heldAudio { play(samples, for: turn) }
+        turn.heldAudio.removeAll()
+    }
+
+    private func play(_ samples: [Float], for turn: Turn) {
+        guard self.turn === turn else { return }
+        if !turn.spoke {
+            turn.spoke = true
+            lastLatencyMs = Int(Date().timeIntervalSince(turn.speechEndedAt) * 1000)
+        }
+        phase = .speaking
+        audio.play(samples)
+    }
+
+    private func finalize(_ turn: Turn) {
+        guard turn.revealed, !turn.finalized else { return }
+        turn.finalized = true
+        history.append(.init(role: "assistant", content: SentenceChunker.visible(turn.reply)))
+        saveConversation()
+        if self.turn === turn, !audio.isPlaying {
+            self.turn = nil
+            phase = restPhase
+        }
+    }
+
+    private func finishEmpty(_ turn: Turn) {
+        liveText = nil
+        if self.turn === turn { self.turn = nil }
+        phase = restPhase
+    }
 
     private func playbackDrained() {
-        if phase == .speaking, !speakingTurn { phase = .listening }
+        guard phase == .speaking else { return }
+        if let turn, turn.generating { return } // just a gap between sentences
+        turn = nil
+        phase = restPhase
+    }
+}
+
+/// One assistant reply. It starts as a draft the moment you pause and only becomes
+/// real ("committed") if you stay quiet for the whole end-of-turn wait. A draft
+/// transcribes, thinks and synthesizes, but holds its audio back.
+@MainActor
+private final class Turn {
+    let speechEndedAt: Date
+    var committed = false
+    var userText: String?
+    var reply = ""
+    var heldAudio: [[Float]] = []
+    var lineIndex: Int?
+    var generating = true
+    var revealed = false
+    var finalized = false
+    var spoke = false
+    var sharedScreen = false
+    /// What tools did, shown under the reply.
+    var notes: [String] = []
+    var failure: Error?
+    var task: Task<Void, Never>?
+
+    init(speechEndedAt: Date) {
+        self.speechEndedAt = speechEndedAt
     }
 }
 

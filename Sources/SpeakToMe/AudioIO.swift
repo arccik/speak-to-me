@@ -35,9 +35,21 @@ final class AudioIO {
         return pendingBuffers > 0
     }
 
-    func start() throws {
+    private(set) var isRunning = false
+    private(set) var micEnabled = false
+
+    /// `withMic: false` sets up playback only (for typed messages), with no mic or
+    /// echo cancellation, so no microphone permission is needed.
+    func start(withMic: Bool = true) throws {
         engine = AVAudioEngine()
         player = AVAudioPlayerNode()
+        micEnabled = withMic
+        guard withMic else {
+            engine.attach(player)
+            engine.connect(player, to: engine.mainMixerNode, format: speakerFormat)
+            try startEngine()
+            return
+        }
         let input = engine.inputNode
         _ = engine.outputNode
         try input.setVoiceProcessingEnabled(true)
@@ -60,8 +72,13 @@ final class AudioIO {
         input.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, _ in
             self?.handleMic(buffer, monoFormat: monoInput)
         }
+        try startEngine()
+    }
+
+    private func startEngine() throws {
         engine.prepare()
         try engine.start()
+        isRunning = true
 
         // Installed after start so it can't disturb the voice-processing format negotiation.
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
@@ -71,7 +88,9 @@ final class AudioIO {
     }
 
     func stop() {
-        engine.inputNode.removeTap(onBus: 0)
+        guard isRunning else { return }
+        isRunning = false
+        if micEnabled { engine.inputNode.removeTap(onBus: 0) }
         engine.mainMixerNode.removeTap(onBus: 0)
         levels.mic = 0
         levels.speaker = 0

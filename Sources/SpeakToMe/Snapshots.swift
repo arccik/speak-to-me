@@ -17,12 +17,12 @@ enum Snapshots {
             .init(role: "assistant", text: "That's Mount Elbrus in the Caucasus, at about 5,642 metres. It's a dormant volcano with two summits."),
             .init(role: "user", text: "Have people skied down it?"),
             .init(role: "assistant", text: "Yes, plenty! There's a ski resort on its southern slopes, and", interrupted: true),
-            .init(role: "user", text: "Wait, is it in Russia?"),
-            .init(role: "assistant", text: "It is. Elbrus sits in southern Russia, near the border with Georgia."),
+            .init(role: "user", text: "What's the weather there right now?"),
+            .init(role: "assistant", text: "It's about minus eight at the summit, with strong winds and clear skies.", note: "Searched the web: weather Mount Elbrus"),
         ]
         let states: [(String, VoiceSession.Phase, [VoiceSession.Line], Float, Float)] = [
             ("1-ready-empty", .ready, [], 0, 0),
-            ("2-listening-empty", .hearing, [], 0.7, 0),
+            ("2-hearing-live", .hearing, Array(conversation.prefix(2)), 0.7, 0),
             ("3-thinking", .thinking, Array(conversation.prefix(5)) + [.init(role: "assistant", text: "")], 0, 0),
             ("4-speaking", .speaking, conversation, 0, 0.75),
             ("5-error", .failed("Can't reach oMLX at http://127.0.0.1:8000. Is the oMLX app running?"), [], 0, 0),
@@ -31,6 +31,7 @@ enum Snapshots {
             let session = VoiceSession()
             session.phase = phase
             session.lines = lines
+            if phase == .hearing { session.liveText = "And how long does it take to climb" }
             session.lastLatencyMs = lines.isEmpty ? nil : 912
             session.models = [.init(id: "gemma-4-26b-a4b-it-4bit", sizeBytes: 16_108_266_064)]
             session.modelID = "gemma-4-26b-a4b-it-4bit"

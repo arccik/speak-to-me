@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-@main
 struct SpeakToMeApp: App {
-    @StateObject private var session = VoiceSession()
+    @ObservedObject private var session = VoiceSession.shared
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         let args = CommandLine.arguments
@@ -23,15 +23,31 @@ struct SpeakToMeApp: App {
         }
         // Launched via `swift run` there is no app bundle; make it a normal foreground app anyway.
         NSApplication.shared.setActivationPolicy(.regular)
+
+        let session = VoiceSession.shared
+        GlobalHotKey.registerOptionSpace {
+            MainActor.assumeIsolated {
+                guard session.canToggle else { return }
+                session.toggle()
+                // Working in another app? Show the floating orb so you can see it listening.
+                if !NSApp.isActive || !AppActions.mainWindowVisible { MiniOrbController.shared.show(session: session) }
+            }
+        }
     }
 
     var body: some Scene {
-        WindowGroup("Speak to Me") {
+        WindowGroup("Speak to Me", id: "main") {
             ContentView()
                 .environmentObject(session)
                 .frame(minWidth: 440, minHeight: 640)
-                .task { await session.boot() }
-                .onAppear { NSApp.activate(ignoringOtherApps: true) }
+                .task { await session.bootOnce() }
+                .onAppear {
+                    AppActions.openMainWindow = openWindow
+                    NSApp.activate(ignoringOtherApps: true)
+                    if UserDefaults.standard.bool(forKey: "miniOrbVisible") {
+                        MiniOrbController.shared.show(session: session)
+                    }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 520, height: 800)
@@ -39,5 +55,29 @@ struct SpeakToMeApp: App {
         Settings {
             SettingsView().environmentObject(session)
         }
+
+        MenuBarExtra {
+            MenuBarContent().environmentObject(session)
+        } label: {
+            Image(systemName: session.isActive ? "waveform.circle.fill" : "waveform.circle")
+        }
+    }
+}
+
+private struct MenuBarContent: View {
+    @EnvironmentObject private var session: VoiceSession
+
+    var body: some View {
+        Button(session.isActive ? "Stop Listening" : "Start Listening") { session.toggle() }
+            .disabled(!session.canToggle)
+        Text("⌥Space toggles from any app")
+        Divider()
+        Button("Show Window") { AppActions.showMainWindow() }
+        Button(MiniOrbController.shared.isVisible ? "Hide Floating Orb" : "Show Floating Orb") {
+            MiniOrbController.shared.toggle(session: session)
+        }
+        Divider()
+        Button("Quit Speak to Me") { NSApp.terminate(nil) }
+            .keyboardShortcut("q")
     }
 }

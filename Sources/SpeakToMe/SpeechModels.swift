@@ -6,13 +6,13 @@ import Foundation
 ///
 /// - Silero VAD: detects when you start and stop talking.
 /// - Parakeet TDT v3: speech-to-text, 25 languages.
-/// - Kokoro 82M (ANE v3 pipeline): text-to-speech.
+/// - Kokoro 82M (ANE v3 pipeline): text-to-speech, in a crash-isolated helper process.
 final class SpeechModels {
     let vad: VadManager
     let asr: AsrManager
-    let tts: KokoroAneManager
+    let tts: TTSWorker
 
-    private init(vad: VadManager, asr: AsrManager, tts: KokoroAneManager) {
+    private init(vad: VadManager, asr: AsrManager, tts: TTSWorker) {
         self.vad = vad
         self.asr = asr
         self.tts = tts
@@ -28,6 +28,10 @@ final class SpeechModels {
     static func load(voice: String, progress: @escaping @Sendable (String) -> Void) async throws -> SpeechModels {
         try FileManager.default.createDirectory(at: modelsRoot, withIntermediateDirectories: true)
 
+        // The voice loads in its own process, in parallel with everything below.
+        let tts = TTSWorker(voice: voice)
+        let ttsReady = Task { try await tts.start(progress: progress) }
+
         progress("Loading voice detection…")
         let vad = try await VadManager(config: VadConfig(defaultThreshold: 0.5), modelDirectory: appRoot)
 
@@ -38,15 +42,11 @@ final class SpeechModels {
         let asr = AsrManager(config: .default)
         try await asr.loadModels(asrModels)
 
-        progress("Loading voice (first run downloads and compiles it, ~1 min)…")
-        let tts = KokoroAneManager(defaultVoice: voice, directory: modelsRoot, version: .v3)
-        try await tts.initialize(preloadVoices: [voice])
-
         progress("Warming up…")
-        _ = try? await tts.synthesizeDetailed(text: "Hello there.", voice: voice)
         var state = TdtDecoderState.make(decoderLayers: await asr.decoderLayerCount)
         _ = try? await asr.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state)
 
+        try await ttsReady.value
         return SpeechModels(vad: vad, asr: asr, tts: tts)
     }
 
@@ -56,7 +56,12 @@ final class SpeechModels {
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func speak(_ text: String, voice: String, speed: Float) async throws -> [Float] {
-        try await tts.synthesizeDetailed(text: text, voice: voice, speed: speed).samples
+    /// English goes to Kokoro; other languages to a macOS system voice when one exists.
+    /// A cloned voice (PocketTTS, English only) replaces Kokoro when given.
+    func speak(_ text: String, voice: String, speed: Float, language: String = "en", clonedVoice: String? = nil) async throws -> [Float] {
+        if language != "en", SystemVoice.hasVoice(for: language) {
+            return await SystemVoice.speak(text, language: language, speed: speed)
+        }
+        return try await tts.speak(text, voice: voice, speed: speed, clonedVoice: clonedVoice)
     }
 }

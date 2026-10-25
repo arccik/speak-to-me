@@ -39,6 +39,14 @@ struct Mood {
         }
     }
 
+    /// Smooth while something's happening, gentle on the CPU while idle.
+    static func frameInterval(for phase: VoiceSession.Phase) -> Double {
+        switch phase {
+        case .listening, .hearing, .transcribing, .thinking, .speaking: return 1.0 / 30
+        default: return 1.0 / 12
+        }
+    }
+
     /// Which audio drives the cloud right now.
     static func level(for phase: VoiceSession.Phase, levels: AudioLevels, time: Double) -> Double {
         switch phase {
@@ -111,7 +119,7 @@ struct MistOrb: View {
     @State private var animator = MoodAnimator()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase))) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 animator.step(to: .of(phase), level: Mood.level(for: phase, levels: levels, time: now), now: now)
@@ -205,7 +213,7 @@ struct GlowWaves: View {
     @State private var animator = MoodAnimator()
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase))) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 animator.step(to: .of(phase), level: Mood.level(for: phase, levels: levels, time: now), now: now)
