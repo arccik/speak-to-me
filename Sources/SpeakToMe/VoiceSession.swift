@@ -82,6 +82,13 @@ final class VoiceSession: ObservableObject {
     @Published private(set) var language = "en"
     /// True while the microphone is on (a voice conversation is running).
     @Published private(set) var micOn = false
+    /// The conversation stays on, but it can't hear you (and you can't interrupt it).
+    @Published var micMuted = false {
+        didSet {
+            audio.micMuted = micMuted
+            if micMuted { liveText = nil }
+        }
+    }
 
     /// Where things settle after a reply: listening if the mic is on, otherwise idle.
     private var restPhase: Phase { micOn ? .listening : .ready }
@@ -361,7 +368,68 @@ final class VoiceSession: ObservableObject {
         audio.stop()
         if micOn { SoundCues.play(.stop) }
         micOn = false
+        micMuted = false
         phase = .ready
+    }
+
+    /// True while a reply is being worked out or spoken.
+    var isReplying: Bool { assistantBusy }
+
+    /// Cuts the current reply short but keeps the conversation (and the mic) going.
+    func stopReply() {
+        guard assistantBusy || audio.isPlaying else { return }
+        interrupt()
+        liveText = nil
+        phase = restPhase
+    }
+
+    /// Speaks a message again, whatever the mute setting.
+    func readAloud(_ text: String) {
+        guard let speech, !text.isEmpty else { return }
+        if assistantBusy || audio.isPlaying { interrupt() } else { discardDraft() }
+        if !audio.isRunning {
+            configureAudioCallbacks()
+            try? audio.start(withMic: false)
+        }
+        // Committed so audio plays straight away; never revealed, so nothing lands in the history.
+        let turn = Turn(speechEndedAt: Date())
+        turn.committed = true
+        turn.spoke = true
+        self.turn = turn
+        phase = .thinking
+        let voice = voice, speed = Float(speed), turnLanguage = language
+        let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
+        turn.task = Task {
+            var chunker = SentenceChunker()
+            for sentence in chunker.push(text) + chunker.finish() {
+                let sentenceLanguage = matchLanguage ? LanguageDetector.detect(sentence) ?? turnLanguage : "en"
+                guard let samples = try? await speech.speak(
+                        sentence, voice: voice, speed: speed, language: sentenceLanguage, clonedVoice: clonedVoice),
+                      !Task.isCancelled
+                else { if Task.isCancelled { return } else { continue } }
+                play(samples, for: turn)
+            }
+            turn.generating = false
+            if self.turn === turn, !audio.isPlaying {
+                self.turn = nil
+                phase = restPhase
+            }
+        }
+    }
+
+    /// There's an answer to your last message that can be asked for again.
+    var canRetry: Bool {
+        lines.contains { $0.role == "user" } && lines.last?.role != "user"
+    }
+
+    /// Throws away the last reply and asks again.
+    func retryLast() {
+        guard canRetry, let i = lines.lastIndex(where: { $0.role == "user" }) else { return }
+        let text = lines[i].text
+        cancelTurn()
+        lines.removeSubrange(i...)
+        while let last = history.popLast(), last.role != "user" {}
+        send(text)
     }
 
     /// Starts a fresh conversation; the current one stays in the history list.

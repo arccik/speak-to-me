@@ -38,6 +38,13 @@ final class AudioIO {
     private(set) var isRunning = false
     private(set) var micEnabled = false
 
+    /// While muted the mic keeps running but delivers silence, so the listener just hears a pause.
+    var micMuted: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _micMuted }
+        set { lock.lock(); _micMuted = newValue; lock.unlock() }
+    }
+    private var _micMuted = false
+
     /// `withMic: false` sets up playback only (for typed messages), with no mic or
     /// echo cancellation, so no microphone permission is needed.
     func start(withMic: Bool = true) throws {
@@ -125,6 +132,11 @@ final class AudioIO {
         }
         guard error == nil, out.frameLength > 0, let data = out.floatChannelData?[0] else { return }
         let samples = UnsafeBufferPointer(start: data, count: Int(out.frameLength))
+        if micMuted {
+            levels.mic = 0
+            onMicSamples?([Float](repeating: 0, count: samples.count))
+            return
+        }
         levels.mic = AudioLevels.rms(samples)
         onMicSamples?(Array(samples))
     }

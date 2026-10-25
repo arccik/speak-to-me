@@ -283,6 +283,7 @@ private struct StatusLabel: View {
     }
 
     private var title: String {
+        if session.micMuted, session.phase == .listening { return "MIC MUTED" }
         switch session.phase {
         case .loading: return "LOADING"
         case .ready: return "READY"
@@ -310,6 +311,7 @@ private struct StatusLabel: View {
     }
 
     private var dotColor: Color {
+        if session.micMuted, session.phase == .listening { return RGBA.hex(0xFFB36B).color() }
         switch session.phase {
         case .listening, .hearing: return Theme.accent
         case .thinking, .transcribing: return Theme.violet
@@ -332,7 +334,7 @@ private struct Transcript: View {
             } else if Snapshots.isRendering {
                 VStack(alignment: .leading, spacing: 18) {
                     Spacer(minLength: 0)
-                    ForEach(session.lines) { MessageRow(line: $0, isLive: isLive($0)) }
+                    ForEach(session.lines) { MessageRow(line: $0, isLive: isLive($0), isLast: $0.id == session.lines.last?.id) }
                     LiveUserText()
                 }
                 .padding(.horizontal, 22)
@@ -343,7 +345,7 @@ private struct Transcript: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
                             ForEach(session.lines) { line in
-                                MessageRow(line: line, isLive: isLive(line))
+                                MessageRow(line: line, isLive: isLive(line), isLast: line.id == session.lines.last?.id)
                                     .id(line.id)
                                     .transition(.asymmetric(
                                         insertion: .opacity.combined(with: .offset(y: 12)),
@@ -461,8 +463,11 @@ private struct SuggestionChip: View {
 }
 
 private struct MessageRow: View {
+    @EnvironmentObject private var session: VoiceSession
     let line: VoiceSession.Line
     let isLive: Bool
+    let isLast: Bool
+    @State private var hovering = false
 
     var body: some View {
         switch line.role {
@@ -521,11 +526,35 @@ private struct MessageRow: View {
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Theme.secondary)
                 }
+                if !line.text.isEmpty, !isLive {
+                    actions
+                        // Always on the latest reply so they're discoverable; on hover for the rest.
+                        .opacity(hovering || isLast ? 1 : 0)
+                        .animation(.easeOut(duration: 0.15), value: hovering)
+                }
             }
             .frame(maxWidth: 420, alignment: .leading)
             Spacer(minLength: 30)
         }
         .padding(.leading, 4)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 2) {
+            MessageAction(systemImage: "doc.on.doc", doneImage: "checkmark", help: "Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(line.text, forType: .string)
+            }
+            MessageAction(systemImage: "speaker.wave.2", help: "Read aloud") { session.readAloud(line.text) }
+                .disabled(!session.canToggle)
+            if isLast, session.canRetry {
+                MessageAction(systemImage: "arrow.clockwise", help: "Ask again") { session.retryLast() }
+                    .disabled(!session.canToggle || session.isReplying)
+            }
+        }
+        .padding(.leading, -6) // optically align the icons with the text
     }
 
     private var error: some View {
@@ -535,6 +564,38 @@ private struct MessageRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// A tiny icon button under a reply; can flash a checkmark to confirm it worked.
+private struct MessageAction: View {
+    let systemImage: String
+    var doneImage: String?
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+    @State private var done = false
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button {
+            action()
+            guard doneImage != nil else { return }
+            done = true
+            Task { try? await Task.sleep(for: .seconds(1.2)); done = false }
+        } label: {
+            Image(systemName: done ? doneImage ?? systemImage : systemImage)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(done ? Theme.accent : hovering ? Theme.text : Theme.tertiary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 24, height: 22)
+                .background(hovering ? Theme.surface : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.4)
+        .onHover { hovering = $0 && enabled }
+        .help(help)
     }
 }
 
@@ -663,7 +724,7 @@ private struct ComposerToggle: View {
     }
 }
 
-/// Space toggles the mic, except while you're typing in a text field.
+/// Space toggles the mic, M mutes it and Esc stops a reply, except while you're typing in a text field.
 @MainActor
 enum SpaceKey {
     private static var monitor: Any?
@@ -671,13 +732,17 @@ enum SpaceKey {
     static func install() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.keyCode == 49,
+            guard [49, 46, 53].contains(event.keyCode),
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock).isEmpty,
                   !(event.window?.firstResponder is NSText),
                   event.window?.identifier?.rawValue.hasPrefix("main") == true
             else { return event }
             let session = VoiceSession.shared
-            if session.canToggle { session.toggle() }
+            switch event.keyCode {
+            case 49: if session.canToggle { session.toggle() }
+            case 46: guard session.micOn else { return event }; session.micMuted.toggle()
+            default: guard session.isReplying else { return event }; session.stopReply()
+            }
             return nil
         }
     }
@@ -694,11 +759,19 @@ private struct Dock: View {
         VStack(spacing: 12) {
             Composer(focused: $composerFocused)
             HStack(spacing: 10) {
+                DockButton(
+                    systemImage: session.micMuted ? "mic.slash.fill" : "mic.fill",
+                    tint: session.micMuted ? RGBA.hex(0xFFB36B).color() : nil,
+                    help: session.micMuted ? "Unmute the mic (M)" : "Mute the mic, keep the conversation going (M)"
+                ) { session.micMuted.toggle() }
+                    .disabled(!session.micOn)
                 waves.scaleEffect(x: -1) // mirrored, so both sides flow out of the mic
                 MicButton()
                 waves
+                DockButton(systemImage: "stop.circle", tint: nil, help: "Stop this reply (Esc)") { session.stopReply() }
+                    .disabled(!session.isReplying)
             }
-            .frame(maxWidth: 420)
+            .frame(maxWidth: 460)
             Text(hint)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.tertiary)
@@ -720,7 +793,40 @@ private struct Dock: View {
 
     private var hint: String {
         if composerFocused { return "Return to send  ·  Esc to go back to voice" }
-        return session.micOn ? "Space to stop  ·  talk over me to interrupt" : "Space to talk  ·  ⌥Space from any app"
+        if session.isReplying {
+            if !session.micOn { return "Esc to stop the reply" }
+            return session.micMuted ? "Esc to stop the reply  ·  M to unmute" : "Esc or talk over me to stop the reply"
+        }
+        if session.micMuted { return "Mic muted  ·  M to unmute" }
+        return session.micOn ? "Space to stop  ·  M to mute" : "Space to talk  ·  ⌥Space from any app"
+    }
+}
+
+/// The small round buttons at either end of the dock.
+private struct DockButton: View {
+    let systemImage: String
+    let tint: Color?
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint ?? (hovering ? Theme.text : Theme.secondary))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 38, height: 38)
+                .background((tint ?? .white).opacity(tint != nil ? 0.16 : hovering ? 0.1 : 0.06), in: Circle())
+                .overlay(Circle().stroke(tint?.opacity(0.4) ?? Theme.hairline))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.3)
+        .onHover { hovering = $0 && enabled }
+        .help(help)
+        .animation(.easeOut(duration: 0.15), value: tint != nil)
     }
 }
 
