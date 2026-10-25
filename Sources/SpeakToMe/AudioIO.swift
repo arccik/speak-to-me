@@ -22,6 +22,9 @@ final class AudioIO {
     private let lock = NSLock()
     private var pendingBuffers = 0
 
+    /// Live mic and speaker loudness for the visualizer.
+    let levels = AudioLevels()
+
     /// Called on the audio thread with 16 kHz mono samples.
     var onMicSamples: (([Float]) -> Void)?
     /// Called (on an arbitrary thread) when every scheduled buffer has finished playing.
@@ -59,10 +62,19 @@ final class AudioIO {
         }
         engine.prepare()
         try engine.start()
+
+        // Installed after start so it can't disturb the voice-processing format negotiation.
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            guard let self, let data = buffer.floatChannelData?[0] else { return }
+            self.levels.speaker = AudioLevels.rms(UnsafeBufferPointer(start: data, count: Int(buffer.frameLength)))
+        }
     }
 
     func stop() {
         engine.inputNode.removeTap(onBus: 0)
+        engine.mainMixerNode.removeTap(onBus: 0)
+        levels.mic = 0
+        levels.speaker = 0
         stopPlayback()
         engine.stop()
     }
@@ -93,7 +105,9 @@ final class AudioIO {
             return mono
         }
         guard error == nil, out.frameLength > 0, let data = out.floatChannelData?[0] else { return }
-        onMicSamples?(Array(UnsafeBufferPointer(start: data, count: Int(out.frameLength))))
+        let samples = UnsafeBufferPointer(start: data, count: Int(out.frameLength))
+        levels.mic = AudioLevels.rms(samples)
+        onMicSamples?(Array(samples))
     }
 
     // MARK: - Speaker
@@ -129,6 +143,32 @@ final class AudioIO {
         pendingBuffers = 0
         lock.unlock()
         player.stop()
+    }
+}
+
+/// Thread-safe loudness values (0…1), written by audio threads and read by the UI every frame.
+final class AudioLevels: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _mic: Float = 0
+    private var _speaker: Float = 0
+
+    var mic: Float {
+        get { lock.lock(); defer { lock.unlock() }; return _mic }
+        set { lock.lock(); _mic = newValue; lock.unlock() }
+    }
+
+    var speaker: Float {
+        get { lock.lock(); defer { lock.unlock() }; return _speaker }
+        set { lock.lock(); _speaker = newValue; lock.unlock() }
+    }
+
+    /// RMS mapped to a perceptual 0…1 range (≈ -50 dB → 0, ≈ -10 dB → 1).
+    static func rms(_ samples: UnsafeBufferPointer<Float>) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples { sum += s * s }
+        let db = 20 * log10(max(sqrt(sum / Float(samples.count)), 1e-6))
+        return min(1, max(0, (db + 50) / 40))
     }
 }
 

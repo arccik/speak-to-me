@@ -29,7 +29,6 @@ final class VoiceSession: ObservableObject {
     @Published var phase: Phase = .loading("Starting…")
     @Published var lines: [Line] = []
     @Published var models: [OMLXClient.Model] = []
-    @Published var micLevel: Float = 0
     @Published var lastLatencyMs: Int?
     /// Mic problems are shown here instead of `.failed`, so Start stays usable for a retry.
     @Published var micNotice: String?
@@ -52,6 +51,22 @@ final class VoiceSession: ObservableObject {
         "bf_emma", "bf_isabella", "bm_george", "bm_lewis", "bm_daniel",
     ]
 
+    /// "af_heart" → "Heart · American female".
+    static func voiceName(_ id: String) -> String {
+        let parts = id.split(separator: "_", maxSplits: 1)
+        guard parts.count == 2, let tag = parts.first, tag.count == 2 else { return id }
+        let accent = tag.first == "b" ? "British" : "American"
+        let gender = tag.last == "m" ? "male" : "female"
+        return "\(parts[1].capitalized) · \(accent) \(gender)"
+    }
+
+    var canToggle: Bool {
+        switch phase {
+        case .loading, .failed: return false
+        default: return true
+        }
+    }
+
     var isActive: Bool {
         switch phase {
         case .listening, .hearing, .transcribing, .thinking, .speaking: return true
@@ -61,6 +76,7 @@ final class VoiceSession: ObservableObject {
 
     private let client = OMLXClient.fromSettings()
     private let audio = AudioIO()
+    var levels: AudioLevels { audio.levels }
     private var speech: SpeechModels?
     private var listenerTask: Task<Void, Never>?
     private var turnTask: Task<Void, Never>?
@@ -162,7 +178,6 @@ final class VoiceSession: ObservableObject {
         micStream?.finish()
         audio.stop()
         phase = .ready
-        micLevel = 0
     }
 
     func clearConversation() {
@@ -199,9 +214,7 @@ final class VoiceSession: ObservableObject {
                 guard let result = try? await vad.processStreamingChunk(chunk, state: vadState) else { continue }
                 vadState = result.state
                 let probability = result.probability
-                let level = min(1, sqrt(chunk.reduce(0) { $0 + $1 * $1 } / Float(chunk.count)) * 8)
                 let (assistantBusy, endMs) = await MainActor.run { () -> (Bool, Int) in
-                    session?.micLevel = level
                     return (session?.assistantBusy ?? false, session?.endOfTurnMs ?? 600)
                 }
 
