@@ -15,37 +15,53 @@ enum Theme {
 
 struct ContentView: View {
     @EnvironmentObject private var session: VoiceSession
+    @AppStorage("chatOpen") private var chatOpen = false
 
     var body: some View {
+        let showChat = chatOpen && !session.lines.isEmpty
         ZStack {
             Backdrop()
             VStack(spacing: 0) {
                 TopBar()
-                hero
-                Transcript()
+                if !showChat { Spacer(minLength: 0) }
+                hero(compact: showChat)
+                if showChat {
+                    Transcript()
+                        .transition(.opacity.combined(with: .offset(y: 30)))
+                } else {
+                    Group {
+                        if session.lines.isEmpty && (session.liveText ?? "").isEmpty {
+                            EmptyState()
+                        } else {
+                            Caption()
+                        }
+                    }
+                    .transition(.opacity)
+                    Spacer(minLength: 0)
+                }
                 Dock()
             }
             .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
+            .animation(.spring(duration: 0.6, bounce: 0.12), value: showChat)
         }
         .preferredColorScheme(.dark)
         .onAppear(perform: SpaceKey.install)
     }
 
-    /// The orb takes centre stage until there's a conversation, then shrinks to make room for it.
-    private var hero: some View {
-        let compact = !session.lines.isEmpty
+    /// The orb is the whole show until you open the chat, then it shrinks to make room for it.
+    private func hero(compact: Bool) -> some View {
         // Negative spacing: the cloud only fills the middle of its canvas, so tuck the label under it.
-        return VStack(spacing: compact ? -8 : -40) {
+        VStack(spacing: compact ? -4 : -70) {
             MistOrb(phase: session.phase, levels: session.levels)
-                .frame(width: compact ? 130 : 300, height: compact ? 110 : 300)
-                .contentShape(Circle())
+                .aspectRatio(1, contentMode: .fit)
+                .frame(minWidth: 0, maxWidth: compact ? 120 : 460, minHeight: 0, maxHeight: compact ? 120 : 460)
+                .contentShape(Circle().scale(0.6))
                 .onTapGesture { if session.canToggle { session.toggle() } }
                 .help(session.isActive ? "Stop" : "Start talking")
             StatusLabel()
         }
-        .padding(.top, compact ? 4 : 24)
+        .padding(.top, compact ? 0 : 4)
         .padding(.bottom, compact ? 4 : 0)
-        .animation(.spring(duration: 0.6, bounce: 0.15), value: compact)
     }
 }
 
@@ -54,17 +70,18 @@ struct ContentView: View {
 /// Deep navy, with a soft glow behind the orb that takes on the colour of the current phase.
 private struct Backdrop: View {
     @EnvironmentObject private var session: VoiceSession
+    @AppStorage("chatOpen") private var chatOpen = false
 
     var body: some View {
-        let compact = !session.lines.isEmpty
+        let compact = chatOpen && !session.lines.isEmpty
         ZStack {
             LinearGradient(colors: [Theme.backgroundTop, Theme.backgroundBottom], startPoint: .top, endPoint: .bottom)
             GeometryReader { geo in
                 Ellipse()
-                    .fill(Mood.of(session.phase).mid.color(compact ? 0.22 : 0.3))
-                    .frame(width: geo.size.width * 1.1, height: compact ? 260 : 460)
-                    .blur(radius: 110)
-                    .position(x: geo.size.width / 2, y: compact ? 60 : 200)
+                    .fill(Mood.of(session.phase).mid.color(compact ? 0.22 : 0.34))
+                    .frame(width: geo.size.width * 1.2, height: compact ? 260 : 560)
+                    .blur(radius: 120)
+                    .position(x: geo.size.width / 2, y: compact ? 60 : geo.size.height * 0.36)
                     .animation(.easeInOut(duration: 0.9), value: session.phase)
                     .animation(.spring(duration: 0.6), value: compact)
             }
@@ -79,6 +96,7 @@ private struct Backdrop: View {
 private struct TopBar: View {
     @EnvironmentObject private var session: VoiceSession
     @ObservedObject private var shortcuts = Shortcuts.shared
+    @AppStorage("chatOpen") private var chatOpen = false
 
     var body: some View {
         HStack(spacing: 4) {
@@ -86,6 +104,11 @@ private struct TopBar: View {
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(session.lines.isEmpty)
             HistoryButton()
+            TopIconButton(systemImage: chatOpen ? "text.bubble.fill" : "text.bubble",
+                          help: chatOpen ? "Hide the conversation (C)" : "Show the conversation (C)") {
+                chatOpen.toggle()
+            }
+            .disabled(session.lines.isEmpty)
             Spacer(minLength: 8)
             ModelMenu()
             TopIconButton(systemImage: "pip.enter",
@@ -331,9 +354,7 @@ private struct Transcript: View {
 
     var body: some View {
         Group {
-            if session.lines.isEmpty && (session.liveText ?? "").isEmpty {
-                EmptyState()
-            } else if Snapshots.isRendering {
+            if Snapshots.isRendering {
                 VStack(alignment: .leading, spacing: 18) {
                     Spacer(minLength: 0)
                     ForEach(session.lines) { MessageRow(line: $0, isLive: isLive($0), isLast: $0.id == session.lines.last?.id) }
@@ -418,7 +439,6 @@ private struct EmptyState: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Spacer()
             Text(session.isActive ? "Go ahead, I'm listening" : "Talk to your local AI")
                 .font(.system(size: 20, weight: .semibold, design: .rounded))
                 .foregroundStyle(Theme.text)
@@ -435,10 +455,108 @@ private struct EmptyState: View {
                 }
             }
             .padding(.top, 4)
-            Spacer()
         }
         .padding(.horizontal, 24)
+        .padding(.top, 18)
     }
+}
+
+/// With the chat closed, only what's being said right now: your words as you speak,
+/// or the latest reply. Long replies keep their newest words in view; click to open the chat.
+private struct Caption: View {
+    @EnvironmentObject private var session: VoiceSession
+    @AppStorage("chatOpen") private var chatOpen = false
+    @State private var hovering = false
+
+    private struct Current: Equatable {
+        var id: String
+        var role: String
+        var text: String
+        var live: Bool
+        var interrupted = false
+    }
+
+    private var current: Current? {
+        if let text = session.liveText, !text.isEmpty {
+            return Current(id: "live", role: "user", text: text, live: true)
+        }
+        guard let line = session.lines.last else { return nil }
+        let speaking = line.role == "assistant" && !line.interrupted
+            && (session.phase == .thinking || session.phase == .speaking)
+        return Current(id: line.id.uuidString, role: line.role, text: line.text, live: speaking,
+                       interrupted: line.interrupted)
+    }
+
+    var body: some View {
+        Button { chatOpen = true } label: {
+            VStack(spacing: 10) {
+                // A fixed stage for the words, so the orb never shifts as they come and go.
+                ZStack(alignment: .top) {
+                    if let current {
+                        words(current)
+                            .id(current.id)
+                            .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)), removal: .opacity))
+                    }
+                }
+                .frame(height: 112)
+                .padding(.top, 10)
+                if !session.lines.isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.up").font(.system(size: 9, weight: .bold))
+                        Text("Show conversation · \(session.lines.count)")
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(hovering ? Theme.secondary : Theme.tertiary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 24)
+                    .background(hovering ? Theme.surface : .clear, in: Capsule())
+                    .overlay(Capsule().stroke(hovering ? Theme.hairline : .clear))
+                }
+            }
+            .frame(maxWidth: 440)
+            .padding(.horizontal, 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.3), value: current?.id)
+        .help("Show the whole conversation (C)")
+    }
+
+    @ViewBuilder
+    private func words(_ current: Current) -> some View {
+        if current.text.isEmpty {
+            TypingDots()
+        } else {
+            let tail = current.live && current.role == "assistant" ? " ▍" : ""
+            (Text(current.text) + Text(tail).foregroundColor(Theme.accent))
+                .font(.system(size: current.role == "user" ? 17 : 18, weight: .regular, design: .rounded))
+                .lineSpacing(5)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(color(current))
+                .fixedSize(horizontal: false, vertical: true)
+                // Newest words at the bottom; older ones fade out over the top.
+                .frame(maxHeight: 112, alignment: needsFade(current.text) ? .bottom : .top)
+                .clipped()
+                .mask(
+                    LinearGradient(stops: [.init(color: needsFade(current.text) ? .clear : .black, location: 0),
+                                           .init(color: .black, location: 0.28)],
+                                   startPoint: .top, endPoint: .bottom))
+        }
+    }
+
+    private func color(_ current: Current) -> Color {
+        switch current.role {
+        case "error": return RGBA.hex(0xFF9A9A).color()
+        // Yours in a cool tint, so it's clear who's talking without a label.
+        case "user": return RGBA.hex(0xBFEFFF).color(current.live ? 0.75 : 0.85)
+        default: return Color.white.opacity(current.interrupted ? 0.5 : current.live ? 0.96 : 0.85)
+        }
+    }
+
+    /// Roughly more than four lines: only then does the top need to fade.
+    private func needsFade(_ text: String) -> Bool { text.count > 150 }
 }
 
 private struct SuggestionChip: View {
@@ -729,7 +847,8 @@ private struct ComposerToggle: View {
     }
 }
 
-/// Space toggles the mic, M mutes it and Esc stops a reply, except while you're typing in a text field.
+/// Space toggles the mic, M mutes it, C shows or hides the chat and Esc stops a reply,
+/// except while you're typing in a text field.
 @MainActor
 enum SpaceKey {
     private static var monitor: Any?
@@ -737,7 +856,7 @@ enum SpaceKey {
     static func install() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard [49, 46, 53].contains(event.keyCode),
+            guard [49, 46, 8, 53].contains(event.keyCode),
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock).isEmpty,
                   !(event.window?.firstResponder is NSText),
                   event.window?.identifier?.rawValue.hasPrefix("main") == true
@@ -746,6 +865,9 @@ enum SpaceKey {
             switch event.keyCode {
             case 49: if session.canToggle { session.toggle() }
             case 46: guard session.micOn else { return event }; session.micMuted.toggle()
+            case 8:
+                guard !session.lines.isEmpty else { return event }
+                UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: "chatOpen"), forKey: "chatOpen")
             default: guard session.isReplying else { return event }; session.stopReply()
             }
             return nil

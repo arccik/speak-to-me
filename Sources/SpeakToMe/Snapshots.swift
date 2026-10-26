@@ -20,14 +20,18 @@ enum Snapshots {
             .init(role: "user", text: "What's the weather there right now?"),
             .init(role: "assistant", text: "It's about minus eight at the summit, with strong winds and clear skies.", note: "Searched the web: weather Mount Elbrus"),
         ]
-        let states: [(String, VoiceSession.Phase, [VoiceSession.Line], Float, Float)] = [
-            ("1-ready-empty", .ready, [], 0, 0),
-            ("2-hearing-live", .hearing, Array(conversation.prefix(2)), 0.7, 0),
-            ("3-thinking", .thinking, Array(conversation.prefix(5)) + [.init(role: "assistant", text: "")], 0, 0),
-            ("4-speaking", .speaking, conversation, 0, 0.75),
-            ("5-error", .failed("Can't reach oMLX at http://127.0.0.1:8000. Is the oMLX app running?"), [], 0, 0),
+        let states: [(String, VoiceSession.Phase, [VoiceSession.Line], Float, Float, Bool)] = [
+            ("1-ready-empty", .ready, [], 0, 0, false),
+            ("2-hearing-live", .hearing, Array(conversation.prefix(2)), 0.7, 0, false),
+            ("3-thinking", .thinking, Array(conversation.prefix(5)) + [.init(role: "assistant", text: "")], 0, 0, false),
+            ("4-speaking", .speaking, conversation, 0, 0.75, false),
+            ("4b-speaking-chat", .speaking, conversation, 0, 0.75, true),
+            ("5-error", .failed("Can't reach oMLX at http://127.0.0.1:8000. Is the oMLX app running?"), [], 0, 0, false),
         ]
-        for (name, phase, lines, mic, speaker) in states {
+        let chatWasOpen = UserDefaults.standard.object(forKey: "chatOpen")
+        defer { UserDefaults.standard.set(chatWasOpen, forKey: "chatOpen") }
+        for (name, phase, lines, mic, speaker, chatOpen) in states {
+            UserDefaults.standard.set(chatOpen, forKey: "chatOpen")
             let session = VoiceSession()
             session.phase = phase
             session.lines = lines
