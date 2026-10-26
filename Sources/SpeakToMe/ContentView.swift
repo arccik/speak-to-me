@@ -763,67 +763,6 @@ private struct TypingDots: View {
 
 // MARK: - Composer
 
-/// Type instead of talking. Enter sends; the speaker button mutes spoken replies.
-private struct Composer: View {
-    @EnvironmentObject private var session: VoiceSession
-    @FocusState.Binding var focused: Bool
-    @State private var draft = ""
-
-    private var canSend: Bool { !draft.trimmingCharacters(in: .whitespaces).isEmpty && session.canToggle }
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 4) {
-            TextField("Message", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .lineLimit(1...5)
-                .focused($focused)
-                .onSubmit(send)
-                .onExitCommand { focused = false }
-                .padding(.vertical, 5)
-                .padding(.trailing, 4)
-            ComposerToggle(
-                systemImage: session.attachScreenNext ? "eye.fill" : "eye",
-                tint: session.attachScreenNext ? Theme.accent : nil,
-                help: session.attachScreenNext
-                    ? "Your screen will be shared with the next message"
-                    : "Share your screen with the next message (or just ask \u{201C}what's on my screen?\u{201D})"
-            ) { session.attachScreenNext.toggle() }
-            ComposerToggle(
-                systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                tint: session.muteReplies ? RGBA.hex(0xFF9A9A).color() : nil,
-                help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies"
-            ) { session.muteReplies.toggle() }
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(canSend ? .white : Theme.tertiary)
-                    .frame(width: 28, height: 28)
-                    .background(canSend ? AnyShapeStyle(Theme.brand) : AnyShapeStyle(Theme.surface), in: Circle())
-                    .shadow(color: canSend ? Theme.accent.opacity(0.4) : .clear, radius: 8)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .help("Send (Return)")
-            .animation(.easeOut(duration: 0.15), value: canSend)
-        }
-        .padding(.leading, 14)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(focused ? 0.075 : 0.055), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(focused ? AnyShapeStyle(Theme.brand.opacity(0.7)) : AnyShapeStyle(Theme.hairline), lineWidth: 1))
-        .animation(.easeOut(duration: 0.15), value: focused)
-    }
-
-    private func send() {
-        guard canSend else { return }
-        session.send(draft)
-        draft = ""
-    }
-}
-
 /// Small icon toggle inside the composer; tinted with a soft backing while it's on.
 private struct ComposerToggle: View {
     let systemImage: String
@@ -877,29 +816,30 @@ enum SpaceKey {
 
 // MARK: - Dock
 
-/// Composer on top, then the mic with the voice waves flowing out of either side.
+/// Voice first: a big piece of the orb in the middle, with the voice waves flowing out of it.
+/// Typing is one click away on the keyboard button, and Esc folds it back into voice.
 private struct Dock: View {
     @EnvironmentObject private var session: VoiceSession
     @ObservedObject private var shortcuts = Shortcuts.shared
-    @FocusState private var composerFocused: Bool
+    @FocusState private var focused: Bool
+    @State private var typing = false
+    @State private var draft = ""
+
+    private var hasDraft: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         VStack(spacing: 12) {
-            Composer(focused: $composerFocused)
-            HStack(spacing: 10) {
-                DockButton(
-                    systemImage: session.micMuted ? "mic.slash.fill" : "mic.fill",
-                    tint: session.micMuted ? RGBA.hex(0xFFB36B).color() : nil,
-                    help: session.micMuted ? "Unmute the mic (M)" : "Mute the mic, keep the conversation going (M)"
-                ) { session.micMuted.toggle() }
-                    .disabled(!session.micOn)
-                waves.scaleEffect(x: -1) // mirrored, so both sides flow out of the mic
-                MicButton()
-                waves
-                DockButton(systemImage: "stop.circle", tint: nil, help: "Stop this reply (Esc)") { session.stopReply() }
-                    .disabled(!session.isReplying)
+            ZStack {
+                if typing {
+                    typeBar
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.92)),
+                                                removal: .opacity.combined(with: .scale(scale: 0.96))))
+                } else {
+                    voiceRow
+                        .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                }
             }
-            .frame(maxWidth: 460)
+            .frame(minHeight: 76)
             Text(hint)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Theme.tertiary)
@@ -907,20 +847,130 @@ private struct Dock: View {
                 .animation(.easeOut(duration: 0.2), value: hint)
         }
         .padding(.horizontal, 22)
-        .padding(.top, 6)
+        .padding(.top, 2)
         .padding(.bottom, 14)
+        .animation(.spring(duration: 0.4, bounce: 0.15), value: typing)
+        .onChange(of: focused) { _, isFocused in
+            // Clicking away from an empty field goes back to voice.
+            if !isFocused && !hasDraft { typing = false }
+        }
+    }
+
+    // MARK: Voice
+
+    private var voiceRow: some View {
+        let mood = Mood.of(session.phase)
+        return HStack(spacing: 10) {
+            GlassButton(systemImage: "keyboard", tint: nil, help: "Type instead") { startTyping() }
+            waves.scaleEffect(x: -1) // mirrored, so both sides flow out of the orb
+            OrbButton(mood: mood, symbol: session.micOn ? "stop.fill" : "mic.fill", size: 68,
+                      live: session.micOn, levels: session.levels, enabled: session.canToggle,
+                      help: session.micOn ? "Stop (Space)" : "Start talking (Space)") { session.toggle() }
+            waves
+            sideAction
+        }
+        .frame(maxWidth: 480)
+        .animation(.easeInOut(duration: 0.8), value: session.phase)
+    }
+
+    /// The one control that matters right now: stop a reply, mute the mic, or mute spoken replies.
+    @ViewBuilder private var sideAction: some View {
+        if session.isReplying {
+            GlassButton(systemImage: "stop.fill", tint: nil, help: "Stop this reply (Esc)") { session.stopReply() }
+        } else if session.micOn {
+            GlassButton(
+                systemImage: session.micMuted ? "mic.slash.fill" : "mic.fill",
+                tint: session.micMuted ? RGBA.hex(0xFFB36B).color() : nil,
+                help: session.micMuted ? "Unmute the mic (M)" : "Mute the mic, keep the conversation going (M)"
+            ) { session.micMuted.toggle() }
+        } else {
+            GlassButton(
+                systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                tint: session.muteReplies ? RGBA.hex(0xFFB3B3).color() : nil,
+                help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies"
+            ) { session.muteReplies.toggle() }
+        }
     }
 
     private var waves: some View {
         GlowWaves(phase: session.phase, levels: session.levels)
-            .frame(height: 40)
+            .frame(height: 44)
             .frame(maxWidth: .infinity)
             .opacity(session.isActive ? 1 : 0.3)
             .animation(.easeOut(duration: 0.4), value: session.isActive)
     }
 
+    // MARK: Typing
+
+    private var typeBar: some View {
+        let mood = Mood.of(session.phase)
+        let shape = RoundedRectangle(cornerRadius: 25, style: .continuous)
+        return HStack(alignment: .bottom, spacing: 2) {
+            TextField("Type a message", text: $draft, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .lineLimit(1...5)
+                .focused($focused)
+                .onSubmit(send)
+                .onExitCommand(perform: stopTyping)
+                .padding(.leading, 14)
+                .padding(.trailing, 4)
+                .padding(.vertical, 12)
+            Group {
+                ComposerToggle(
+                    systemImage: session.attachScreenNext ? "eye.fill" : "eye",
+                    tint: session.attachScreenNext ? Theme.accent : nil,
+                    help: session.attachScreenNext
+                        ? "Your screen will be shared with the next message"
+                        : "Share your screen with the next message (or just ask \u{201C}what's on my screen?\u{201D})"
+                ) { session.attachScreenNext.toggle() }
+                ComposerToggle(
+                    systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                    tint: session.muteReplies ? RGBA.hex(0xFFB3B3).color() : nil,
+                    help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies"
+                ) { session.muteReplies.toggle() }
+            }
+            .padding(.bottom, 6)
+            // Send once there's something typed; otherwise straight back to talking.
+            OrbButton(mood: mood, symbol: hasDraft ? "arrow.up" : "waveform", size: 40,
+                      live: false, levels: session.levels, enabled: hasDraft ? session.canToggle : true,
+                      help: hasDraft ? "Send (Return)" : "Back to voice (Esc)") {
+                hasDraft ? send() : stopTyping()
+            }
+            .padding(.leading, 4)
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 5)
+        .padding(.vertical, 5)
+        .background {
+            shape.fill(LinearGradient(colors: [.white.opacity(0.085), .white.opacity(0.045)], startPoint: .top, endPoint: .bottom))
+                .overlay(shape.strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.16), mood.mid.color(0.4), .white.opacity(0.03)],
+                                   startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .shadow(color: mood.mid.color(0.2), radius: 22, y: 4)
+                .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
+        }
+        .frame(maxWidth: 560)
+    }
+
+    private func startTyping() {
+        typing = true
+        DispatchQueue.main.async { focused = true }
+    }
+
+    private func stopTyping() {
+        focused = false
+        typing = false
+    }
+
+    private func send() {
+        guard hasDraft, session.canToggle else { return }
+        session.send(draft)
+        draft = ""
+    }
+
     private var hint: String {
-        if composerFocused { return "Return to send  ·  Esc to go back to voice" }
+        if typing { return "Return to send  ·  Esc to go back to voice" }
         if session.isReplying {
             if !session.micOn { return "Esc to stop the reply" }
             return session.micMuted ? "Esc to stop the reply  ·  M to unmute" : "Esc or talk over me to stop the reply"
@@ -931,14 +981,13 @@ private struct Dock: View {
     }
 }
 
-/// The small round buttons at either end of the dock.
-private struct DockButton: View {
+/// The round buttons either side of the orb: the same frosted glass as the typing bar.
+private struct GlassButton: View {
     let systemImage: String
     let tint: Color?
     let help: String
     let action: () -> Void
     @State private var hovering = false
-    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         Button(action: action) {
@@ -946,69 +995,79 @@ private struct DockButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(tint ?? (hovering ? Theme.text : Theme.secondary))
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 38, height: 38)
-                .background((tint ?? .white).opacity(tint != nil ? 0.16 : hovering ? 0.1 : 0.06), in: Circle())
-                .overlay(Circle().stroke(tint?.opacity(0.4) ?? Theme.hairline))
+                .frame(width: 42, height: 42)
+                .background {
+                    Circle()
+                        .fill(tint.map { AnyShapeStyle($0.opacity(0.16)) } ?? AnyShapeStyle(
+                            LinearGradient(colors: [.white.opacity(hovering ? 0.12 : 0.08), .white.opacity(hovering ? 0.06 : 0.03)],
+                                           startPoint: .top, endPoint: .bottom)))
+                        .overlay(Circle().strokeBorder(
+                            LinearGradient(colors: [(tint ?? .white).opacity(0.3), (tint ?? .white).opacity(0.04)],
+                                           startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                        .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+                }
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.3)
-        .onHover { hovering = $0 && enabled }
+        .onHover { hovering = $0 }
         .help(help)
+        .animation(.easeOut(duration: 0.15), value: hovering)
         .animation(.easeOut(duration: 0.15), value: tint != nil)
     }
 }
 
-private struct MicButton: View {
-    @EnvironmentObject private var session: VoiceSession
+/// A piece of the orb: the same core-to-edge colours as the current mood, glowing, with
+/// rings that ride the audio while the mic is live.
+private struct OrbButton: View {
+    let mood: Mood
+    let symbol: String
+    let size: CGFloat
+    let live: Bool
+    let levels: AudioLevels
+    let enabled: Bool
+    let help: String
+    let action: () -> Void
     @State private var hovering = false
     @State private var onScreen = true
 
     var body: some View {
-        Button { session.toggle() } label: {
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !session.micOn || !onScreen)) { timeline in
-                let level = Double(max(session.levels.mic, session.levels.speaker))
-                let t = timeline.date.timeIntervalSinceReferenceDate
+        Button(action: action) {
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !live || !onScreen)) { timeline in
+                let level = Double(max(levels.mic, levels.speaker))
+                let breath = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
                 ZStack {
-                    if session.micOn {
-                        // Two rings: one breathing on a clock, one riding the audio level.
-                        let breath = (t.truncatingRemainder(dividingBy: 2.4)) / 2.4
+                    if live {
                         Circle()
-                            .stroke(Theme.accent.opacity(0.5 * (1 - breath)), lineWidth: 1.5)
-                            .scaleEffect(1 + breath * 0.55)
+                            .stroke(mood.mid.color(0.55 * (1 - breath)), lineWidth: 1.5)
+                            .scaleEffect(1 + breath * 0.5)
                         Circle()
-                            .stroke(Theme.brand, lineWidth: 2)
-                            .scaleEffect(1.08 + level * 0.32)
-                            .opacity(0.35 + level * 0.65)
+                            .stroke(mood.core.color(0.5 + level * 0.5), lineWidth: 2)
+                            .scaleEffect(1.06 + level * 0.3)
+                            .opacity(0.3 + level * 0.7)
                     }
                     Circle()
-                        .fill(Theme.brand)
-                        .overlay(
-                            // Glassy top highlight.
-                            Circle().fill(LinearGradient(colors: [.white.opacity(0.35), .clear],
-                                                         startPoint: .top, endPoint: .center))
-                                .padding(2))
-                        .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1))
-                        .shadow(color: Theme.accent.opacity(session.micOn ? 0.6 : 0.3), radius: session.micOn ? 22 : 14)
-                        .shadow(color: Theme.violet.opacity(0.35), radius: 6, y: 3)
-                    Image(systemName: session.micOn ? "stop.fill" : "mic.fill")
-                        .font(.system(size: session.micOn ? 20 : 23, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                        .fill(RadialGradient(colors: [mood.core.color(), mood.mid.color(), mood.edge.color()],
+                                             center: UnitPoint(x: 0.42, y: 0.36), startRadius: 0, endRadius: size * 0.75))
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 0.75))
+                        .shadow(color: mood.mid.color(live ? 0.75 : hovering ? 0.6 : 0.45), radius: size * (live ? 0.4 : 0.28))
+                        .shadow(color: mood.edge.color(0.5), radius: 6, y: 3)
+                    Image(systemName: symbol)
+                        .font(.system(size: size * (symbol == "mic.fill" ? 0.36 : 0.32), weight: .bold))
+                        .foregroundStyle(mood.edge.mix(.hex(0x0A0B18), 0.45).color())
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .frame(width: 66, height: 66)
+                .frame(width: size, height: size)
                 .scaleEffect(hovering ? 1.05 : 1)
             }
         }
         .buttonStyle(.plain)
-        .disabled(!session.canToggle)
-        .saturation(session.canToggle ? 1 : 0)
-        .opacity(session.canToggle ? 1 : 0.45)
-        .onHover { hovering = $0 }
+        .disabled(!enabled)
+        .saturation(enabled ? 1 : 0)
+        .opacity(enabled ? 1 : 0.45)
+        .onHover { hovering = $0 && enabled }
         .onWindowVisibilityChange { onScreen = $0 }
-        .help(session.micOn ? "Stop (Space)" : "Start talking (Space)")
+        .help(help)
         .animation(.spring(duration: 0.3, bounce: 0.3), value: hovering)
-        .animation(.easeOut(duration: 0.2), value: session.micOn)
+        .animation(.easeOut(duration: 0.2), value: symbol)
     }
 }
