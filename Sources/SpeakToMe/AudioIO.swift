@@ -67,7 +67,19 @@ final class AudioIO {
     func start(withMic: Bool = true, echoCancellation: Bool = true) throws {
         micEnabled = withMic
         echoCancellationWanted = withMic && echoCancellation
-        try build(voiceProcessing: false)
+        // Just after another engine or app let go of the audio device, starting it can
+        // fail with a generic hardware error ('what', 2003329396) that clears up within
+        // a moment, so give it a few tries before reporting a problem.
+        for attempt in 1... {
+            do {
+                try build(voiceProcessing: false)
+                return
+            } catch {
+                teardown()
+                guard attempt < 6 else { throw error }
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+        }
     }
 
     private func build(voiceProcessing enabled: Bool) throws {
