@@ -50,6 +50,7 @@ final class MiniOrbController {
 
 private struct MiniOrbView: View {
     @EnvironmentObject private var session: VoiceSession
+    @ObservedObject private var shortcuts = Shortcuts.shared
 
     var body: some View {
         VStack(spacing: 2) {
@@ -85,7 +86,7 @@ private struct MiniOrbView: View {
             Divider()
             Button("Hide Floating Orb") { MiniOrbController.shared.hide() }
         }
-        .help("Click to start or stop · ⌥Space from anywhere")
+        .help(shortcuts.talk.map { "Click to start or stop · \($0.display) from anywhere" } ?? "Click to start or stop")
     }
 
     private var caption: String {
@@ -96,7 +97,7 @@ private struct MiniOrbView: View {
         case .speaking: return "SPEAKING"
         case .loading: return "LOADING"
         case .failed: return "ERROR"
-        case .ready: return "⌥SPACE TO TALK"
+        case .ready: return shortcuts.talk.map { "\($0.display.uppercased()) TO TALK" } ?? "CLICK TO TALK"
         }
     }
 

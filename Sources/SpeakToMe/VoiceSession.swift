@@ -46,7 +46,9 @@ final class VoiceSession: ObservableObject {
         models.first { $0.id == modelID }?.isVision ?? false
     }
 
-    @Published var phase: Phase = .loading("Starting…")
+    @Published var phase: Phase = .loading("Starting…") {
+        didSet { if phase != oldValue { followEchoCancellation() } }
+    }
     @Published var lines: [Line] = []
     @Published var savedConversations: [ConversationStore.Summary] = []
     private var conversationID = UUID()
@@ -74,6 +76,9 @@ final class VoiceSession: ObservableObject {
     /// Let the model search the web, check the time and open apps/pages.
     @AppStorage("useTools") var useTools = true
     @AppStorage("soundCues") var soundCues = true
+    /// Talk over replies without headphones. macOS turns down other apps' audio
+    /// (YouTube, music) while it's active, so it's only on while a reply is under way.
+    @AppStorage("echoCancellation") var echoCancellation = true
     /// Speak English replies in a voice cloned from your recording (PocketTTS).
     @AppStorage("useMyVoice") var useMyVoice = false
     @Published var myVoiceStatus: String?
@@ -140,6 +145,7 @@ final class VoiceSession: ObservableObject {
     }
 
     private let client = OMLXClient.fromSettings()
+    var serverAddress: String { client.baseURL.absoluteString }
     private let audio = AudioIO()
     var levels: AudioLevels { audio.levels }
     private var speech: SpeechModels?
@@ -344,7 +350,7 @@ final class VoiceSession: ObservableObject {
         configureAudioCallbacks()
         if audio.isRunning { audio.stop() } // playback-only engine from a typed message
         do {
-            try audio.start()
+            try audio.start(echoCancellation: echoCancellation)
         } catch {
             micStream?.finish()
             micNotice = "Couldn't start the microphone: \(error.localizedDescription)"
@@ -466,7 +472,15 @@ final class VoiceSession: ObservableObject {
             conversationID = UUID()
             conversationCreated = Date()
         }
-        savedConversations = store.list()
+        savedConversations.removeAll { $0.id == id }
+    }
+
+    func deleteAllConversations() {
+        cancelTurn()
+        for item in savedConversations { store.delete(item.id) }
+        savedConversations.removeAll()
+        deleteConversation(conversationID)
+        if case .loading = phase {} else { phase = restPhase }
     }
 
     /// Removes the current conversation without saving (used by `--chattest`).
@@ -476,8 +490,12 @@ final class VoiceSession: ObservableObject {
 
     private func saveConversation() {
         guard lines.contains(where: { $0.role == "user" }) else { return }
-        store.save(.init(id: conversationID, created: conversationCreated, updated: Date(), lines: lines))
-        savedConversations = store.list()
+        let conversation = ConversationStore.Conversation(
+            id: conversationID, created: conversationCreated, updated: Date(), lines: lines)
+        store.save(conversation)
+        // Update the list in place rather than re-reading every saved conversation from disk.
+        savedConversations.removeAll { $0.id == conversation.id }
+        if let summary = ConversationStore.summary(of: conversation) { savedConversations.insert(summary, at: 0) }
     }
 
     private func cancelTurn() {
@@ -571,6 +589,16 @@ final class VoiceSession: ObservableObject {
         }
     }
 
+    /// Echo cancellation runs only around replies, so other apps keep their volume the rest of the time.
+    private func followEchoCancellation() {
+        switch phase {
+        case .transcribing, .thinking, .speaking: audio.prepareEchoCancellation()
+        case .hearing: audio.holdEchoCancellation()
+        case .listening: audio.relaxEchoCancellation()
+        default: break
+        }
+    }
+
     private var assistantBusy: Bool {
         phase == .thinking || phase == .speaking || phase == .transcribing
     }
@@ -599,6 +627,7 @@ final class VoiceSession: ObservableObject {
         guard let turn else { return }
         turn.task?.cancel()
         if turn.committed, turn.revealed {
+            showReply(turn, now: true)
             if turn.generating { history.append(.init(role: "assistant", content: SentenceChunker.visible(turn.reply))) }
             if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].interrupted = true }
             saveConversation()
@@ -734,14 +763,13 @@ final class VoiceSession: ObservableObject {
                     case .text(let token):
                         turn.reply += token
                         roundText += token
-                        if let i = turn.lineIndex, lines.indices.contains(i) {
-                            lines[i].text = SentenceChunker.visible(turn.reply)
-                        }
+                        showReply(turn)
                         for sentence in chunker.push(token) { sentenceSink.yield(sentence) }
                     case .toolCall(let call):
                         calls.append(call)
                     }
                 }
+                showReply(turn, now: true)
                 guard !calls.isEmpty else { break }
 
                 for sentence in chunker.finish() { sentenceSink.yield(sentence) }
@@ -777,6 +805,17 @@ final class VoiceSession: ObservableObject {
         }
     }
 
+    /// Tokens stream in dozens of times a second and every change redraws the window,
+    /// so the reply on screen is refreshed at most ~15 times a second.
+    private func showReply(_ turn: Turn, now force: Bool = false) {
+        guard let i = turn.lineIndex, lines.indices.contains(i) else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(turn.lastShown) >= 1.0 / 15 else { return }
+        turn.lastShown = now
+        let text = SentenceChunker.visible(turn.reply)
+        if lines[i].text != text { lines[i].text = text }
+    }
+
     /// Puts the turn on screen and into the history, and plays anything already synthesized.
     private func reveal(_ turn: Turn) {
         guard !turn.revealed, let text = turn.userText else { return }
@@ -809,6 +848,7 @@ final class VoiceSession: ObservableObject {
     private func finalize(_ turn: Turn) {
         guard turn.revealed, !turn.finalized else { return }
         turn.finalized = true
+        showReply(turn, now: true)
         history.append(.init(role: "assistant", content: SentenceChunker.visible(turn.reply)))
         saveConversation()
         if self.turn === turn, !audio.isPlaying {
@@ -847,6 +887,8 @@ private final class Turn {
     var finalized = false
     var spoke = false
     var sharedScreen = false
+    /// When the reply on screen was last refreshed.
+    var lastShown = Date.distantPast
     /// What tools did, shown under the reply.
     var notes: [String] = []
     var failure: Error?
@@ -860,6 +902,7 @@ private final class Turn {
 extension SentenceChunker {
     /// The reply as shown on screen: thinking removed, otherwise untouched.
     static func visible(_ text: String) -> String {
+        guard text.contains("<think>") else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
         var s = text.replacingOccurrences(of: #"<think>[\s\S]*?(</think>|$)"#, with: "", options: .regularExpression)
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return s

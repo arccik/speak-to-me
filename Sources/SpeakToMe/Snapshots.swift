@@ -45,6 +45,40 @@ enum Snapshots {
             else { continue }
             try? png.write(to: dir.appendingPathComponent("\(name).png"))
         }
-        exit(0)
+        renderSettings(to: dir)
+    }
+
+    /// Forms and lists are AppKit-backed, which ImageRenderer can't draw, so these go
+    /// through a real (offscreen) window instead.
+    private static func renderSettings(to dir: URL) {
+        let session = VoiceSession()
+        session.models = [.init(id: "gemma-4-26b-a4b-it-4bit", sizeBytes: 16_108_266_064)]
+        session.modelID = "gemma-4-26b-a4b-it-4bit"
+        let panes = SettingsView.Pane.allCases
+        let original = UserDefaults.standard.string(forKey: "settingsPane")
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 720, height: 560),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+
+        func capture(_ index: Int) {
+            guard index < panes.count else {
+                UserDefaults.standard.set(original, forKey: "settingsPane")
+                exit(0)
+            }
+            UserDefaults.standard.set(panes[index].rawValue, forKey: "settingsPane")
+            window.contentView = NSHostingView(rootView: SettingsView().environmentObject(session))
+            window.orderFrontRegardless()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                MainActor.assumeIsolated {
+                    if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?
+                            .write(to: dir.appendingPathComponent("settings-\(panes[index].rawValue).png"))
+                    }
+                    capture(index + 1)
+                }
+            }
+        }
+        capture(0)
     }
 }

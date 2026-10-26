@@ -78,6 +78,7 @@ private struct Backdrop: View {
 
 private struct TopBar: View {
     @EnvironmentObject private var session: VoiceSession
+    @ObservedObject private var shortcuts = Shortcuts.shared
 
     var body: some View {
         HStack(spacing: 4) {
@@ -87,7 +88,8 @@ private struct TopBar: View {
             HistoryButton()
             Spacer(minLength: 8)
             ModelMenu()
-            TopIconButton(systemImage: "pip.enter", help: "Floating orb, ⌥Space from any app") {
+            TopIconButton(systemImage: "pip.enter",
+                          help: shortcuts.floatingOrb.map { "Floating orb (\($0.display))" } ?? "Floating orb") {
                 MiniOrbController.shared.toggle(session: session)
             }
             SettingsLink { TopIconLabel(systemImage: "slider.horizontal.3") }
@@ -622,8 +624,10 @@ private struct BubbleShape: Shape {
 }
 
 private struct TypingDots: View {
+    @State private var onScreen = true
+
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !onScreen)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             HStack(spacing: 5) {
                 ForEach(0..<3) { i in
@@ -635,6 +639,7 @@ private struct TypingDots: View {
             }
             .frame(height: 20)
         }
+        .onWindowVisibilityChange { onScreen = $0 }
     }
 }
 
@@ -753,6 +758,7 @@ enum SpaceKey {
 /// Composer on top, then the mic with the voice waves flowing out of either side.
 private struct Dock: View {
     @EnvironmentObject private var session: VoiceSession
+    @ObservedObject private var shortcuts = Shortcuts.shared
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -798,7 +804,8 @@ private struct Dock: View {
             return session.micMuted ? "Esc to stop the reply  ·  M to unmute" : "Esc or talk over me to stop the reply"
         }
         if session.micMuted { return "Mic muted  ·  M to unmute" }
-        return session.micOn ? "Space to stop  ·  M to mute" : "Space to talk  ·  ⌥Space from any app"
+        if session.micOn { return "Space to stop  ·  M to mute" }
+        return shortcuts.talk.map { "Space to talk  ·  \($0.display) from any app" } ?? "Space to talk"
     }
 }
 
@@ -833,10 +840,11 @@ private struct DockButton: View {
 private struct MicButton: View {
     @EnvironmentObject private var session: VoiceSession
     @State private var hovering = false
+    @State private var onScreen = true
 
     var body: some View {
         Button { session.toggle() } label: {
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !session.micOn)) { timeline in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !session.micOn || !onScreen)) { timeline in
                 let level = Double(max(session.levels.mic, session.levels.speaker))
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 ZStack {
@@ -876,110 +884,9 @@ private struct MicButton: View {
         .saturation(session.canToggle ? 1 : 0)
         .opacity(session.canToggle ? 1 : 0.45)
         .onHover { hovering = $0 }
+        .onWindowVisibilityChange { onScreen = $0 }
         .help(session.micOn ? "Stop (Space)" : "Start talking (Space)")
         .animation(.spring(duration: 0.3, bounce: 0.3), value: hovering)
         .animation(.easeOut(duration: 0.2), value: session.micOn)
-    }
-}
-
-// MARK: - Settings
-
-struct SettingsView: View {
-    @EnvironmentObject private var session: VoiceSession
-
-    var body: some View {
-        Form {
-            Section("Voice") {
-                Picker("Voice", selection: $session.voice) {
-                    ForEach(VoiceSession.voices, id: \.self) { Text(VoiceSession.voiceName($0)).tag($0) }
-                }
-                Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
-                LabeledContent("Speaking speed") {
-                    HStack {
-                        Slider(value: $session.speed, in: 0.8...1.4, step: 0.05)
-                        Text(String(format: "%.2f×", session.speed)).monospacedDigit().frame(width: 48)
-                    }
-                }
-            }
-            Section {
-                LabeledContent("Current language") {
-                    Text(LanguageDetector.name(session.language))
-                }
-            } footer: {
-                Text("English uses the Kokoro voice above. Other languages use macOS voices; get better ones in System Settings → Accessibility → Spoken Content → System Voice → Manage Voices.")
-            }
-            Section {
-                Toggle("Sound cues when the mic turns on and off", isOn: $session.soundCues)
-                LabeledContent("Reply after silence") {
-                    Stepper("\(session.endOfTurnMs) ms", value: $session.endOfTurnMs, in: 256...2048, step: 128)
-                }
-            } header: {
-                Text("Turn-taking")
-            } footer: {
-                Text("Shorter feels snappier; longer gives you time to think mid-sentence.")
-            }
-            Section {
-                Toggle("Keep the model loaded in oMLX", isOn: $session.keepModelLoaded)
-                Toggle("Let it use tools (web search, time, open apps)", isOn: $session.useTools)
-                    .onChange(of: session.keepModelLoaded) { Task { await session.updatePin() } }
-            } header: {
-                Text("Model")
-            } footer: {
-                Text("Pinning keeps replies instant but holds the model's memory while oMLX runs. Tools use oMLX's web search; replies that need them take a few seconds longer.")
-            }
-            MyVoiceSection()
-            Section("Personality") {
-                TextEditor(text: $session.systemPrompt)
-                    .font(.body)
-                    .frame(minHeight: 120)
-                Button("Reset to default") { session.systemPrompt = VoiceSession.defaultPrompt }
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 460)
-        .padding(.vertical, 8)
-    }
-}
-
-/// Record (or pick) a sample of your voice, then hear replies in it.
-private struct MyVoiceSection: View {
-    @EnvironmentObject private var session: VoiceSession
-
-    var body: some View {
-        Section {
-            Toggle("Speak replies in my voice", isOn: $session.useMyVoice)
-                .disabled(!session.hasMyVoice)
-            Text(VoiceSession.voiceScript)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            HStack {
-                Button(session.hasMyVoice ? "Re-record (12 s)" : "Record my voice (12 s)") {
-                    Task { await session.recordMyVoice() }
-                }
-                Button("Use an audio file…") {
-                    let panel = NSOpenPanel()
-                    panel.allowedContentTypes = [.audio]
-                    if panel.runModal() == .OK, let url = panel.url {
-                        Task { await session.importMyVoice(from: url) }
-                    }
-                }
-                Spacer()
-                if session.hasMyVoice {
-                    Button("Delete", role: .destructive) { session.deleteMyVoice() }
-                }
-            }
-            .disabled(session.myVoiceBusy)
-            if let status = session.myVoiceStatus {
-                HStack(spacing: 6) {
-                    if session.myVoiceBusy { ProgressView().controlSize(.small) }
-                    Text(status).font(.callout)
-                }
-            }
-        } header: {
-            Text("Your voice")
-        } footer: {
-            Text("Read the text above at your normal pace in a quiet room. Everything stays on this Mac. Used for English replies; a little slower than the built-in voices.")
-        }
     }
 }

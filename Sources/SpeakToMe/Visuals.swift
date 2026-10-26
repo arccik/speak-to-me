@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Mood
@@ -44,6 +45,14 @@ struct Mood {
         switch phase {
         case .listening, .hearing, .transcribing, .thinking, .speaking: return 1.0 / 30
         default: return 1.0 / 12
+        }
+    }
+
+    /// Nothing is happening: once the mood has eased in, the visuals can hold still.
+    static func isIdle(_ phase: VoiceSession.Phase) -> Bool {
+        switch phase {
+        case .loading, .ready, .failed: return true
+        default: return false
         }
     }
 
@@ -117,9 +126,10 @@ struct MistOrb: View {
     let phase: VoiceSession.Phase
     let levels: AudioLevels
     @State private var animator = MoodAnimator()
+    @State private var paused = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase))) { timeline in
+        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase), paused: paused)) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 animator.step(to: .of(phase), level: Mood.level(for: phase, levels: levels, time: now), now: now)
@@ -127,6 +137,7 @@ struct MistOrb: View {
             }
         }
         .drawingGroup()
+        .pausesWhenIdle(phase: phase, paused: $paused)
     }
 
     private func draw(in context: inout GraphicsContext, size: CGSize) {
@@ -211,9 +222,10 @@ struct GlowWaves: View {
     let phase: VoiceSession.Phase
     let levels: AudioLevels
     @State private var animator = MoodAnimator()
+    @State private var paused = false
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase))) { timeline in
+        TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase), paused: paused)) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 animator.step(to: .of(phase), level: Mood.level(for: phase, levels: levels, time: now), now: now)
@@ -234,6 +246,7 @@ struct GlowWaves: View {
                 }
             }
         }
+        .pausesWhenIdle(phase: phase, paused: $paused)
     }
 
     private func wave(size: CGSize, amplitude: Double, frequency: Double, phase: Double) -> Path {
@@ -247,5 +260,83 @@ struct GlowWaves: View {
             i == 0 ? path.move(to: p) : path.addLine(to: p)
         }
         return path
+    }
+}
+
+// MARK: - Pausing
+
+extension View {
+    /// Stops a blurred, every-frame animation when nobody can see it move: a couple of
+    /// seconds after the conversation goes idle (once the mood has eased in), or while
+    /// its window is hidden, minimised or fully covered (say, by a full-screen video).
+    func pausesWhenIdle(phase: VoiceSession.Phase, paused: Binding<Bool>) -> some View {
+        modifier(IdlePause(phase: phase, paused: paused))
+    }
+
+    /// Reports whether the view's window is actually on screen.
+    func onWindowVisibilityChange(_ action: @escaping (Bool) -> Void) -> some View {
+        background(WindowVisibilityProbe(onChange: action))
+    }
+}
+
+private struct IdlePause: ViewModifier {
+    let phase: VoiceSession.Phase
+    @Binding var paused: Bool
+    @State private var settled = false
+    @State private var onScreen = true
+
+    func body(content: Content) -> some View {
+        content
+            .onWindowVisibilityChange { onScreen = $0; update() }
+            .task(id: Mood.isIdle(phase)) {
+                settled = false
+                update()
+                guard Mood.isIdle(phase) else { return }
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                settled = true
+                update()
+            }
+    }
+
+    private func update() {
+        let shouldPause = settled || !onScreen
+        if paused != shouldPause { paused = shouldPause }
+    }
+}
+
+private struct WindowVisibilityProbe: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {
+        view.onChange = onChange
+    }
+
+    final class Probe: NSView {
+        var onChange: ((Bool) -> Void)?
+        private var observer: NSObjectProtocol?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            guard let window else { return }
+            observer = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self] _ in self?.report() }
+            // Not during the SwiftUI update that attached us.
+            DispatchQueue.main.async { [weak self] in self?.report() }
+        }
+
+        private func report() {
+            guard let window else { return }
+            onChange?(window.occlusionState.contains(.visible))
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
     }
 }

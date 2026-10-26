@@ -25,13 +25,17 @@ struct SpeakToMeApp: App {
         NSApplication.shared.setActivationPolicy(.regular)
 
         let session = VoiceSession.shared
-        GlobalHotKey.registerOptionSpace {
-            MainActor.assumeIsolated {
+        MainActor.assumeIsolated {
+            Shortcuts.shared.install(.talk) {
                 guard session.canToggle else { return }
                 session.toggle()
                 // Working in another app? Show the floating orb so you can see it listening.
-                if !NSApp.isActive || !AppActions.mainWindowVisible { MiniOrbController.shared.show(session: session) }
+                if UserDefaults.standard.object(forKey: "orbOnHotKey") as? Bool ?? true,
+                   !NSApp.isActive || !AppActions.mainWindowVisible {
+                    MiniOrbController.shared.show(session: session)
+                }
             }
+            Shortcuts.shared.install(.floatingOrb) { MiniOrbController.shared.toggle(session: session) }
         }
     }
 
@@ -66,11 +70,12 @@ struct SpeakToMeApp: App {
 
 private struct MenuBarContent: View {
     @EnvironmentObject private var session: VoiceSession
+    @ObservedObject private var shortcuts = Shortcuts.shared
 
     var body: some View {
         Button(session.isActive ? "Stop Listening" : "Start Listening") { session.toggle() }
             .disabled(!session.canToggle)
-        Text("⌥Space toggles from any app")
+        if let talk = shortcuts.talk { Text("\(talk.display) toggles from any app") }
         Divider()
         Button("Show Window") { AppActions.showMainWindow() }
         Button(MiniOrbController.shared.isVisible ? "Hide Floating Orb" : "Show Floating Orb") {
