@@ -6,11 +6,13 @@ import Foundation
 ///
 /// - Silero VAD: detects when you start and stop talking.
 /// - Parakeet TDT v3: speech-to-text, 25 languages.
-/// - Kokoro 82M (ANE v3 pipeline): text-to-speech, in a crash-isolated helper process.
+/// - Kokoro 82M (ANE v3 pipeline): English text-to-speech, in a crash-isolated helper process.
+/// - Supertonic-3: text-to-speech for 30 other languages, loaded only when needed.
 final class SpeechModels {
     let vad: VadManager
     let asr: AsrManager
     let tts: TTSWorker
+    let multilingual = MultilingualVoices()
 
     private init(vad: VadManager, asr: AsrManager, tts: TTSWorker) {
         self.vad = vad
@@ -56,11 +58,28 @@ final class SpeechModels {
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// English goes to Kokoro; other languages to a macOS system voice when one exists.
-    /// A cloned voice (PocketTTS, English only) replaces Kokoro when given.
-    func speak(_ text: String, voice: String, speed: Float, language: String = "en", clonedVoice: String? = nil) async throws -> [Float] {
-        if language != "en", SystemVoice.hasVoice(for: language) {
-            return await SystemVoice.speak(text, language: language, speed: speed)
+    /// Starts loading the voice for `language` in the background, so it's ready by the reply.
+    func prepare(language: String, languageVoice: String) {
+        guard MultilingualVoices.languages.contains(language) else { return }
+        Task { [multilingual] in try? await multilingual.prepare(voice: languageVoice) }
+    }
+
+    /// English goes to Kokoro, the 30 other languages Supertonic-3 knows to Supertonic-3
+    /// (`languageVoice`), and anything else, or a Supertonic-3 failure, to a macOS system
+    /// voice when one exists. A cloned voice (PocketTTS, English only) replaces Kokoro when given.
+    func speak(
+        _ text: String, voice: String, speed: Float, language: String = "en",
+        languageVoice: String = MultilingualVoices.defaultVoice, clonedVoice: String? = nil
+    ) async throws -> [Float] {
+        if language != "en" {
+            if MultilingualVoices.languages.contains(language),
+               let samples = try? await multilingual.speak(text, language: language, voice: languageVoice, speed: speed),
+               !samples.isEmpty {
+                return samples
+            }
+            if SystemVoice.hasVoice(for: language) {
+                return await SystemVoice.speak(text, language: language, speed: speed)
+            }
         }
         return try await tts.speak(text, voice: voice, speed: speed, clonedVoice: clonedVoice)
     }

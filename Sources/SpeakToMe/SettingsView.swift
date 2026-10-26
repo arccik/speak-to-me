@@ -266,6 +266,16 @@ private struct KeyRow: View {
 private struct VoicePane: View {
     @EnvironmentObject private var session: VoiceSession
 
+    /// Preview lines for the voice for other languages, in the conversation's language.
+    private static let previews = [
+        "ru": "Привет! Вот так я буду звучать, когда мы говорим по-русски.",
+        "uk": "Привіт! Ось так я звучатиму, коли ми говоримо українською.",
+        "pl": "Cześć! Tak będę brzmieć, kiedy rozmawiamy po polsku.",
+        "de": "Hallo! So klinge ich, wenn wir Deutsch sprechen.",
+        "fr": "Salut ! Voilà comment je parlerai quand nous discutons en français.",
+        "es": "¡Hola! Así sonaré cuando hablemos en español.",
+    ]
+
     /// Voices grouped like "American female", in the order they're listed.
     private var groups: [(String, [String])] {
         var order: [String] = []
@@ -310,10 +320,28 @@ private struct VoicePane: View {
             Section {
                 Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
                 LabeledContent("Current language", value: LanguageDetector.name(session.language))
+                LabeledContent("Voice for other languages") {
+                    HStack(spacing: 8) {
+                        Picker("Voice for other languages", selection: $session.languageVoice) {
+                            ForEach(MultilingualVoices.voices, id: \.self) { id in
+                                Text("\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())").tag(id)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        Button {
+                            session.readAloud(Self.previews[session.language] ?? Self.previews["ru"]!)
+                        } label: {
+                            Label("Preview", systemImage: "play.fill")
+                        }
+                        .disabled(!session.canToggle || !session.matchLanguage)
+                        .help("Hear this voice")
+                    }
+                }
             } header: {
                 Text("Language")
             } footer: {
-                Footer("English uses the voice above. Other languages use macOS voices; get better ones in System Settings → Accessibility → Spoken Content → System Voice → Manage Voices.")
+                Footer("English uses the voice above. Russian, Ukrainian, Polish, German, French, Spanish and 24 more languages use the voice for other languages (downloaded on first use, about 200 MB). Anything else uses a macOS voice.")
             }
             MyVoiceSection()
         }

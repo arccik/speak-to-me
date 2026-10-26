@@ -22,8 +22,9 @@ enum Main {
             Task { @MainActor in await SelfTest.chat() }
             dispatchMain()
         }
-        if args.contains("--langtest") {
-            Task.detached { await SelfTest.languages() }
+        if let flag = args.firstIndex(of: "--langtest") {
+            let dir = args.indices.contains(flag + 1) ? args[flag + 1] : nil
+            Task.detached { await SelfTest.languages(writingTo: dir) }
             dispatchMain()
         }
         SpeakToMeApp.main()

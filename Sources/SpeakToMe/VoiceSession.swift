@@ -63,6 +63,8 @@ final class VoiceSession: ObservableObject {
 
     @AppStorage("model") var modelID = ""
     @AppStorage("voice") var voice = "af_heart"
+    /// Supertonic-3 voice ("F1"…"M5") for replies that aren't in English.
+    @AppStorage("languageVoice") var languageVoice = MultilingualVoices.defaultVoice
     @AppStorage("speed") var speed = 1.05
     @AppStorage("endOfTurnMs") var endOfTurnMs = 600
     @AppStorage("systemPrompt") var systemPrompt = VoiceSession.defaultPrompt
@@ -403,14 +405,15 @@ final class VoiceSession: ObservableObject {
         turn.spoke = true
         self.turn = turn
         phase = .thinking
-        let voice = voice, speed = Float(speed), turnLanguage = language
+        let voice = voice, languageVoice = languageVoice, speed = Float(speed), turnLanguage = language
         let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
         turn.task = Task {
             var chunker = SentenceChunker()
             for sentence in chunker.push(text) + chunker.finish() {
                 let sentenceLanguage = matchLanguage ? LanguageDetector.detect(sentence) ?? turnLanguage : "en"
                 guard let samples = try? await speech.speak(
-                        sentence, voice: voice, speed: speed, language: sentenceLanguage, clonedVoice: clonedVoice),
+                        sentence, voice: voice, speed: speed, language: sentenceLanguage,
+                        languageVoice: languageVoice, clonedVoice: clonedVoice),
                       !Task.isCancelled
                 else { if Task.isCancelled { return } else { continue } }
                 play(samples, for: turn)
@@ -701,6 +704,8 @@ final class VoiceSession: ObservableObject {
                 return
             }
             if matchLanguage, let detected = LanguageDetector.detect(text) { language = detected }
+            // Loads while the model thinks, so the reply's first sentence isn't held up.
+            if matchLanguage { speech.prepare(language: language, languageVoice: languageVoice) }
             var images: [Data] = []
             if attachScreenNext || ScreenVision.wantsScreen(text) {
                 guard currentModelSeesImages else { throw VisionUnavailable(model: modelID) }
@@ -734,7 +739,7 @@ final class VoiceSession: ObservableObject {
     private func generate(_ turn: Turn, messages initial: [OMLXClient.Message], speech: SpeechModels) async throws {
         var messages = initial
         let (sentences, sentenceSink) = AsyncStream<String>.makeStream()
-        let voice = voice, speed = Float(speed), muted = muteReplies
+        let voice = voice, languageVoice = languageVoice, speed = Float(speed), muted = muteReplies
         let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
         let turnLanguage = matchLanguage ? language : "en"
         let ttsTask = Task {
@@ -744,7 +749,7 @@ final class VoiceSession: ObservableObject {
                 let sentenceLanguage = LanguageDetector.detect(sentence) ?? turnLanguage
                 guard let samples = try? await speech.speak(
                         sentence, voice: voice, speed: speed, language: matchLanguage ? sentenceLanguage : "en",
-                        clonedVoice: clonedVoice),
+                        languageVoice: languageVoice, clonedVoice: clonedVoice),
                       !Task.isCancelled
                 else { if Task.isCancelled { return } else { continue } }
                 if turn.committed { play(samples, for: turn) } else { turn.heldAudio.append(samples) }

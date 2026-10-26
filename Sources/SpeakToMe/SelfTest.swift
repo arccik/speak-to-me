@@ -25,7 +25,7 @@ enum SelfTest {
 
             let question = "What is the tallest mountain in Europe, and how high is it?"
             let spoken24k = try await speech.speak(question, voice: "am_adam", speed: 1)
-            let spoken16k = resample(spoken24k, from: 24_000, to: 16_000)
+            let spoken16k = Resampler.convert(spoken24k, from: 24_000, to: 16_000)
             log("synthesized test question (\(spoken16k.count / 16) ms of audio): \(lap()) ms")
 
             // From here on is what you feel after you stop talking.
@@ -63,25 +63,6 @@ enum SelfTest {
             log("SELFTEST FAILED: \(error)")
             exit(1)
         }
-    }
-
-    private static func resample(_ samples: [Float], from: Double, to: Double) -> [Float] {
-        let inFormat = AVAudioFormat(standardFormatWithSampleRate: from, channels: 1)!
-        let outFormat = AVAudioFormat(standardFormatWithSampleRate: to, channels: 1)!
-        let input = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: AVAudioFrameCount(samples.count))!
-        input.frameLength = input.frameCapacity
-        samples.withUnsafeBufferPointer { input.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
-        let output = AVAudioPCMBuffer(
-            pcmFormat: outFormat, frameCapacity: AVAudioFrameCount(Double(samples.count) * to / from) + 64)!
-        let converter = AVAudioConverter(from: inFormat, to: outFormat)!
-        var done = false
-        converter.convert(to: output, error: nil) { _, status in
-            if done { status.pointee = .endOfStream; return nil }
-            done = true
-            status.pointee = .haveData
-            return input
-        }
-        return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
     }
 }
 
@@ -122,23 +103,43 @@ extension SelfTest {
 }
 
 extension SelfTest {
-    /// `SpeakToMe --langtest`: language detection and system-voice synthesis per language.
-    static func languages() async {
+    /// `SpeakToMe --langtest [dir]`: per language, detection, then the macOS voice and
+    /// Supertonic-3 side by side: synthesis time and what Parakeet hears back. With a
+    /// folder, also writes each as a WAV to compare by ear.
+    static func languages(writingTo dir: String?) async {
         let samples = [
-            "What is the tallest mountain in Europe?",
             "Jaka jest najwyższa góra w Europie?",
-            "Какая самая высокая гора в Европе?",
+            "Какая самая высокая гора в Европе? Это Эльбрус, высотой пять тысяч шестьсот сорок два метра.",
             "Яка найвища гора в Європі?",
             "Quelle est la plus haute montagne d'Europe ?",
             "Welcher ist der höchste Berg Europas?",
         ]
+        let speech: SpeechModels
+        do { speech = try await SpeechModels.load(voice: "af_heart") { print("  \($0)") } } catch {
+            print("load failed: \(error)"); exit(1)
+        }
+        func check(_ name: String, _ lang: String, _ audio: [Float], ms: Int) async {
+            let heard = (try? await speech.transcribe(Resampler.convert(audio, from: 24_000, to: 16_000))) ?? "?"
+            print("  \(name): \(audio.count / 24) ms audio in \(ms) ms  →  \(heard)")
+            if let dir {
+                try? WAV.data(audio, sampleRate: 24_000)
+                    .write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(lang)-\(name).wav"))
+            }
+        }
         for text in samples {
             let lang = LanguageDetector.detect(text) ?? "?"
-            let t = Date()
-            let audio = lang == "en" || lang == "?" ? [] : await SystemVoice.speak(text, language: lang, speed: 1)
+            print("\(lang)  \(text)")
+            var t = Date()
+            let system = await SystemVoice.speak(text, language: lang, speed: 1)
             let voice = SystemVoice.bestVoice(for: lang)
-            print("\(lang)  voice: \(voice?.name ?? "-") (\(voice?.quality.rawValue ?? 0))  \(audio.count / 24) ms audio in \(Int(Date().timeIntervalSince(t) * 1000)) ms")
+            await check("macos-\(voice?.name ?? "none")", lang, system, ms: Int(Date().timeIntervalSince(t) * 1000))
+            for name in ["F1", "M1"] {
+                t = Date()
+                let neural = (try? await speech.multilingual.speak(text, language: lang, voice: name, speed: 1.05)) ?? []
+                await check("supertonic-\(name)", lang, neural, ms: Int(Date().timeIntervalSince(t) * 1000))
+            }
         }
+        await speech.tts.stop()
         exit(0)
     }
 }

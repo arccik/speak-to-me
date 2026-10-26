@@ -1,8 +1,9 @@
+import AVFoundation
 import FluidAudio
 import Foundation
 
-/// Kokoro text-to-speech, run in child processes (this same executable, started
-/// with `--tts-worker`).
+/// Kokoro text-to-speech (and PocketTTS cloned voices), run in child processes
+/// (this same executable, started with `--tts-worker`).
 ///
 /// Core ML's CPU backend (libBNNS) on macOS 27 crashes inside Kokoro with an
 /// uncatchable trap for some inputs. Isolated in its own process, a crash can't take
@@ -321,6 +322,72 @@ private actor ClonedVoices {
         }
         let wav = try await manager.synthesize(text: text, voiceData: voice)
         return WAV.samples(wav)
+    }
+}
+
+/// Supertonic-3 (31 languages). Runs in the app itself, not the Kokoro workers, so
+/// there's one copy rather than one per worker. Loaded only once a conversation
+/// turns to another language; the first ever load downloads it (~170 MB).
+actor MultilingualVoices {
+    static let languages = Set(Supertonic3Constants.availableLanguages).subtracting(["en", "na"])
+    static let voices = Supertonic3Voice.allCases.map(\.rawValue)
+    static let defaultVoice = Supertonic3Voice.f1.rawValue
+
+    private var manager: Task<Supertonic3Manager, Error>?
+    private var styles: [Supertonic3Voice: Supertonic3VoiceStyle] = [:]
+
+    func prepare(voice: String) async throws {
+        _ = try await ready()
+        _ = try await style(voice)
+    }
+
+    private func ready() async throws -> Supertonic3Manager {
+        if let manager { return try await manager.value }
+        let task = Task {
+            let manager = Supertonic3Manager(directory: SpeechModels.modelsRoot)
+            try await manager.initialize()
+            return manager
+        }
+        manager = task
+        do { return try await task.value } catch { manager = nil; throw error }
+    }
+
+    /// 24 kHz samples, like Kokoro's.
+    func speak(_ text: String, language: String, voice name: String, speed: Float) async throws -> [Float] {
+        let manager = try await ready()
+        let style = try await style(name)
+        let samples = try await manager.synthesize(text: text, language: language, style: style, speed: speed).samples
+        return Resampler.convert(samples, from: Double(Supertonic3Constants.sampleRate), to: AudioIO.speakerSampleRate)
+    }
+
+    private func style(_ name: String) async throws -> Supertonic3VoiceStyle {
+        let voice = Supertonic3Voice(name: name) ?? .f1
+        if let cached = styles[voice] { return cached }
+        let style = try await Supertonic3ResourceDownloader.loadVoiceStyle(voice, directory: SpeechModels.modelsRoot)
+        styles[voice] = style
+        return style
+    }
+}
+
+enum Resampler {
+    static func convert(_ samples: [Float], from: Double, to: Double) -> [Float] {
+        guard !samples.isEmpty, from != to else { return samples }
+        let inFormat = AVAudioFormat(standardFormatWithSampleRate: from, channels: 1)!
+        let outFormat = AVAudioFormat(standardFormatWithSampleRate: to, channels: 1)!
+        let input = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: AVAudioFrameCount(samples.count))!
+        input.frameLength = input.frameCapacity
+        samples.withUnsafeBufferPointer { input.floatChannelData![0].update(from: $0.baseAddress!, count: samples.count) }
+        let output = AVAudioPCMBuffer(
+            pcmFormat: outFormat, frameCapacity: AVAudioFrameCount(Double(samples.count) * to / from) + 64)!
+        let converter = AVAudioConverter(from: inFormat, to: outFormat)!
+        var done = false
+        converter.convert(to: output, error: nil) { _, status in
+            if done { status.pointee = .endOfStream; return nil }
+            done = true
+            status.pointee = .haveData
+            return input
+        }
+        return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
     }
 }
 
