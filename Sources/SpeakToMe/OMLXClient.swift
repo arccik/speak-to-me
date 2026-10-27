@@ -61,6 +61,10 @@ struct OMLXClient {
     let apiKey: String?
 
     static func fromSettings() -> OMLXClient {
+        // For benchmarks against a stand-in server.
+        if let override = ProcessInfo.processInfo.environment["SPEAKTOME_OMLX_URL"], let url = URL(string: override) {
+            return OMLXClient(baseURL: url, apiKey: nil)
+        }
         let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".omlx/settings.json")
         var host = "127.0.0.1"
         var port = 8000

@@ -1,14 +1,18 @@
 import AVFoundation
 import FluidAudio
 import Foundation
-import SwiftUI
+import Observation
 
 /// The conversation loop:
 /// mic → VAD → (you pause) → Parakeet → oMLX stream → sentence chunks → Kokoro → speaker.
 /// The reply is drafted during your pause and released once the pause is long enough.
 /// If you start talking while the assistant is thinking or speaking, it stops (barge-in).
+///
+/// Views observe it property by property (`@Observable`), so a reply streaming in only
+/// redraws the text that shows it, not every view that knows about the session.
 @MainActor
-final class VoiceSession: ObservableObject {
+@Observable
+final class VoiceSession {
     /// One session for the main window, the floating orb, the menu bar and the hotkey.
     static let shared = VoiceSession()
 
@@ -40,57 +44,63 @@ final class VoiceSession: ObservableObject {
     }
 
     /// Attach a screenshot to the next message (the eye button).
-    @Published var attachScreenNext = false
+    var attachScreenNext = false
 
     var currentModelSeesImages: Bool {
         models.first { $0.id == modelID }?.isVision ?? false
     }
 
-    @Published var phase: Phase = .loading("Starting…") {
+    var phase: Phase = .loading("Starting…") {
         didSet { if phase != oldValue { followEchoCancellation() } }
     }
-    @Published var lines: [Line] = []
-    @Published var savedConversations: [ConversationStore.Summary] = []
+    var lines: [Line] = []
+    var savedConversations: [ConversationStore.Summary] = []
     private var conversationID = UUID()
     private var conversationCreated = Date()
     private let store = ConversationStore()
-    @Published var models: [OMLXClient.Model] = []
-    @Published var lastLatencyMs: Int?
+    var models: [OMLXClient.Model] = []
+    var lastLatencyMs: Int?
     /// What you're saying right now, re-transcribed every half second while you talk.
-    @Published var liveText: String?
+    var liveText: String?
+    /// The reply being written right now. Tokens land here (~15 times a second) rather
+    /// than in `lines`, so only the views showing this text redraw; the line itself is
+    /// updated when a round of the reply is complete.
+    private(set) var streamingText = ""
+    /// The line `streamingText` belongs to.
+    private(set) var streamingLineID: UUID?
     /// Mic problems are shown here instead of `.failed`, so Start stays usable for a retry.
-    @Published var micNotice: String?
+    var micNotice: String?
 
-    @AppStorage("model") var modelID = ""
-    @AppStorage("voice") var voice = "af_heart"
+    var modelID = StoredSetting.value("model", default: "") { didSet { StoredSetting.store(modelID, "model") } }
+    var voice = StoredSetting.value("voice", default: "af_heart") { didSet { StoredSetting.store(voice, "voice") } }
     /// Supertonic-3 voice ("F1"…"M5") for replies that aren't in English.
-    @AppStorage("languageVoice") var languageVoice = MultilingualVoices.defaultVoice
-    @AppStorage("speed") var speed = 1.05
-    @AppStorage("endOfTurnMs") var endOfTurnMs = 600
-    @AppStorage("systemPrompt") var systemPrompt = VoiceSession.defaultPrompt
+    var languageVoice = StoredSetting.value("languageVoice", default: MultilingualVoices.defaultVoice) { didSet { StoredSetting.store(languageVoice, "languageVoice") } }
+    var speed = StoredSetting.value("speed", default: 1.05) { didSet { StoredSetting.store(speed, "speed") } }
+    var endOfTurnMs = StoredSetting.value("endOfTurnMs", default: 600) { didSet { StoredSetting.store(endOfTurnMs, "endOfTurnMs") } }
+    var systemPrompt = StoredSetting.value("systemPrompt", default: VoiceSession.defaultPrompt) { didSet { StoredSetting.store(systemPrompt, "systemPrompt") } }
     /// Keep the chosen model pinned in oMLX so it's never unloaded (no 10 s+ reloads).
     /// Off by default: on a 24 GB Mac a pinned model can leave no room for any other.
-    @AppStorage("keepModelLoaded") var keepModelLoaded = false
+    var keepModelLoaded = StoredSetting.value("keepModelLoaded", default: false) { didSet { StoredSetting.store(keepModelLoaded, "keepModelLoaded") } }
     /// Text-only replies: nothing is spoken aloud.
-    @AppStorage("muteReplies") var muteReplies = false
+    var muteReplies = StoredSetting.value("muteReplies", default: false) { didSet { StoredSetting.store(muteReplies, "muteReplies") } }
     /// Reply in whatever language you speak (detected per message).
-    @AppStorage("matchLanguage") var matchLanguage = true
+    var matchLanguage = StoredSetting.value("matchLanguage", default: true) { didSet { StoredSetting.store(matchLanguage, "matchLanguage") } }
     /// Let the model search the web, check the time and open apps/pages.
-    @AppStorage("useTools") var useTools = true
-    @AppStorage("soundCues") var soundCues = true
+    var useTools = StoredSetting.value("useTools", default: true) { didSet { StoredSetting.store(useTools, "useTools") } }
+    var soundCues = StoredSetting.value("soundCues", default: true) { didSet { StoredSetting.store(soundCues, "soundCues") } }
     /// Talk over replies without headphones. macOS turns down other apps' audio
     /// (YouTube, music) while it's active, so it's only on while a reply is under way.
-    @AppStorage("echoCancellation") var echoCancellation = true
+    var echoCancellation = StoredSetting.value("echoCancellation", default: true) { didSet { StoredSetting.store(echoCancellation, "echoCancellation") } }
     /// Speak English replies in a voice cloned from your recording (PocketTTS).
-    @AppStorage("useMyVoice") var useMyVoice = false
-    @Published var myVoiceStatus: String?
-    @Published private(set) var myVoiceBusy = false
+    var useMyVoice = StoredSetting.value("useMyVoice", default: false) { didSet { StoredSetting.store(useMyVoice, "useMyVoice") } }
+    var myVoiceStatus: String?
+    private(set) var myVoiceBusy = false
     /// The language of the conversation so far; sticks when a message is too short to tell.
-    @Published private(set) var language = "en"
+    private(set) var language = "en"
     /// True while the microphone is on (a voice conversation is running).
-    @Published private(set) var micOn = false
+    private(set) var micOn = false
     /// The conversation stays on, but it can't hear you (and you can't interrupt it).
-    @Published var micMuted = false {
+    var micMuted = false {
         didSet {
             audio.micMuted = micMuted
             if micMuted { liveText = nil }
@@ -100,7 +110,10 @@ final class VoiceSession: ObservableObject {
     /// Where things settle after a reply: listening if the mic is on, otherwise idle.
     private var restPhase: Phase { micOn ? .listening : .ready }
     /// The model this app pinned, so we only ever unpin our own pin.
-    @AppStorage("pinnedByApp") private var pinnedByApp = ""
+    private var pinnedByApp: String {
+        get { UserDefaults.standard.string(forKey: "pinnedByApp") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "pinnedByApp") }
+    }
 
     static let defaultPrompt = """
         You are a friendly, quick-witted voice assistant having a spoken conversation. \
@@ -226,7 +239,11 @@ final class VoiceSession: ObservableObject {
 
     static var myVoiceFolder: URL { SpeechModels.appRoot.appendingPathComponent("MyVoice", isDirectory: true) }
     static var myVoiceFile: URL { myVoiceFolder.appendingPathComponent("voice.bin") }
-    var hasMyVoice: Bool { FileManager.default.fileExists(atPath: Self.myVoiceFile.path) }
+    var hasMyVoice: Bool {
+        _ = myVoiceChanges // the file isn't observable; this is
+        return FileManager.default.fileExists(atPath: Self.myVoiceFile.path)
+    }
+    private var myVoiceChanges = 0
 
     static let voiceScript = "Hi! I'm recording my voice so my assistant can speak like me. "
         + "I like long walks, good coffee and quiet mornings. "
@@ -280,7 +297,7 @@ final class VoiceSession: ObservableObject {
             try await speech.tts.clone(sample: sample, to: Self.myVoiceFile)
             useMyVoice = true
             myVoiceStatus = "Done! Replies in English now use your voice."
-            objectWillChange.send()
+            myVoiceChanges += 1
         } catch {
             myVoiceStatus = "Couldn't learn the voice: \(error.localizedDescription)"
         }
@@ -290,7 +307,7 @@ final class VoiceSession: ObservableObject {
         try? FileManager.default.removeItem(at: Self.myVoiceFolder)
         useMyVoice = false
         myVoiceStatus = nil
-        objectWillChange.send()
+        myVoiceChanges += 1
     }
 
     // MARK: - Conversation on/off
@@ -307,7 +324,7 @@ final class VoiceSession: ObservableObject {
         if assistantBusy || audio.isPlaying { interrupt() } else { discardDraft() }
         if !muteReplies, !audio.isRunning {
             configureAudioCallbacks()
-            try? audio.start(withMic: false)
+            audio.start(withMic: false)
         }
         let turn = Turn(speechEndedAt: Date())
         turn.committed = true
@@ -351,13 +368,14 @@ final class VoiceSession: ObservableObject {
         audio.onMicSamples = { continuation.yield($0) }
         configureAudioCallbacks()
         if audio.isRunning { audio.stop() } // playback-only engine from a typed message
-        do {
-            try audio.start(echoCancellation: echoCancellation)
-        } catch {
-            micStream?.finish()
+        // The engine comes up in the background; show "listening" straight away and
+        // take it back if the microphone can't start.
+        audio.start(echoCancellation: echoCancellation) { [weak self] error in
+            guard let self, let error, micOn else { return }
+            micOn = false // no "mic off" chime: the error sound says it
+            stop()
             micNotice = "Couldn't start the microphone: \(error.localizedDescription)"
             SoundCues.play(.error)
-            return
         }
         micOn = true
         phase = .listening
@@ -397,7 +415,7 @@ final class VoiceSession: ObservableObject {
         if assistantBusy || audio.isPlaying { interrupt() } else { discardDraft() }
         if !audio.isRunning {
             configureAudioCallbacks()
-            try? audio.start(withMic: false)
+            audio.start(withMic: false)
         }
         // Committed so audio plays straight away; never revealed, so nothing lands in the history.
         let turn = Turn(speechEndedAt: Date())
@@ -486,6 +504,16 @@ final class VoiceSession: ObservableObject {
         if case .loading = phase {} else { phase = restPhase }
     }
 
+    /// Starts an unsaved conversation with these lines, leaving the open one untouched (used by `--uibench`).
+    func beginTestConversation(lines: [Line]) {
+        cancelTurn()
+        conversationID = UUID()
+        conversationCreated = Date()
+        self.lines = lines
+        history = lines.map { OMLXClient.Message(role: $0.role, content: $0.text) }
+        phase = restPhase
+    }
+
     /// Removes the current conversation without saving (used by `--chattest`).
     func deleteConversationForTest() {
         deleteConversation(conversationID)
@@ -506,6 +534,7 @@ final class VoiceSession: ObservableObject {
         turn = nil
         audio.stopPlayback()
         liveText = nil
+        endStreaming()
     }
 
     // MARK: - Listening (runs off the main thread)
@@ -810,15 +839,31 @@ final class VoiceSession: ObservableObject {
         }
     }
 
-    /// Tokens stream in dozens of times a second and every change redraws the window,
-    /// so the reply on screen is refreshed at most ~15 times a second.
+    /// Tokens stream in dozens of times a second, so the reply on screen is refreshed at
+    /// most ~15 times a second, through `streamingText`. `force` writes it into the line.
     private func showReply(_ turn: Turn, now force: Bool = false) {
         guard let i = turn.lineIndex, lines.indices.contains(i) else { return }
         let now = Date()
         guard force || now.timeIntervalSince(turn.lastShown) >= 1.0 / 15 else { return }
         turn.lastShown = now
         let text = SentenceChunker.visible(turn.reply)
-        if lines[i].text != text { lines[i].text = text }
+        if force {
+            if lines[i].text != text { lines[i].text = text }
+            endStreaming()
+        } else {
+            if streamingLineID != lines[i].id { streamingLineID = lines[i].id }
+            if streamingText != text { streamingText = text }
+        }
+    }
+
+    private func endStreaming() {
+        if streamingLineID != nil { streamingLineID = nil }
+        if !streamingText.isEmpty { streamingText = "" }
+    }
+
+    /// What a line says right now, including a reply that's still streaming in.
+    func currentText(of line: Line) -> String {
+        line.id == streamingLineID ? streamingText : line.text
     }
 
     /// Puts the turn on screen and into the history, and plays anything already synthesized.
@@ -911,5 +956,16 @@ extension SentenceChunker {
         var s = text.replacingOccurrences(of: #"<think>[\s\S]*?(</think>|$)"#, with: "", options: .regularExpression)
         s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         return s
+    }
+}
+
+/// Settings live in UserDefaults under the same keys `@AppStorage` used.
+private enum StoredSetting {
+    static func value<T>(_ key: String, default value: T) -> T {
+        UserDefaults.standard.object(forKey: key) as? T ?? value
+    }
+
+    static func store<T>(_ value: T, _ key: String) {
+        UserDefaults.standard.set(value, forKey: key)
     }
 }

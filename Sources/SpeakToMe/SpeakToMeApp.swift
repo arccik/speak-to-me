@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct SpeakToMeApp: App {
-    @ObservedObject private var session = VoiceSession.shared
+    private let session = VoiceSession.shared
     @Environment(\.openWindow) private var openWindow
 
     init() {
@@ -20,6 +20,9 @@ struct SpeakToMeApp: App {
             let model = args.indices.contains(flag + 1) ? args[flag + 1] : nil
             Task.detached { await SelfTest.run(model: model) }
             return
+        }
+        if args.contains("--uibench") {
+            Task { @MainActor in await UIBench.run() }
         }
         // Launched via `swift run` there is no app bundle; make it a normal foreground app anyway.
         NSApplication.shared.setActivationPolicy(.regular)
@@ -42,7 +45,7 @@ struct SpeakToMeApp: App {
     var body: some Scene {
         WindowGroup("Speak to Me", id: "main") {
             ContentView()
-                .environmentObject(session)
+                .environment(session)
                 .frame(minWidth: 440, minHeight: 640)
                 .task { await session.bootOnce() }
                 .onAppear {
@@ -57,19 +60,28 @@ struct SpeakToMeApp: App {
         .defaultSize(width: 520, height: 800)
 
         Settings {
-            SettingsView().environmentObject(session)
+            SettingsView().environment(session)
         }
 
         MenuBarExtra {
-            MenuBarContent().environmentObject(session)
+            MenuBarContent().environment(session)
         } label: {
-            Image(systemName: session.isActive ? "waveform.circle.fill" : "waveform.circle")
+            MenuBarIcon().environment(session)
         }
     }
 }
 
+/// A view of its own, so it follows the session's state as it changes.
+private struct MenuBarIcon: View {
+    @Environment(VoiceSession.self) private var session
+
+    var body: some View {
+        Image(systemName: session.isActive ? "waveform.circle.fill" : "waveform.circle")
+    }
+}
+
 private struct MenuBarContent: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @ObservedObject private var shortcuts = Shortcuts.shared
 
     var body: some View {

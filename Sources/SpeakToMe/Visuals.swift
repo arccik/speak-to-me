@@ -122,6 +122,9 @@ final class MoodAnimator {
 
 /// A soft, cloud-like orb: several blurred, gently deforming blobs stacked with
 /// additive blending. Its edge churns with your voice or the assistant's.
+///
+/// Drawn by a Metal shader (`MetalMistOrb`); this Canvas version, which blurs real
+/// layers, is the reference look and is used for snapshots (ImageRenderer can't capture Metal).
 struct MistOrb: View {
     let phase: VoiceSession.Phase
     let levels: AudioLevels
@@ -129,18 +132,27 @@ struct MistOrb: View {
     @State private var paused = false
 
     var body: some View {
+        if MetalMistOrb.isAvailable && !Snapshots.isRendering {
+            MetalMistOrb(phase: phase, levels: levels, paused: paused)
+                .pausesWhenIdle(phase: phase, paused: $paused)
+        } else {
+            canvas
+        }
+    }
+
+    private var canvas: some View {
         TimelineView(.animation(minimumInterval: Mood.frameInterval(for: phase), paused: paused)) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 animator.step(to: .of(phase), level: Mood.level(for: phase, levels: levels, time: now), now: now)
-                draw(in: &context, size: size)
+                Self.draw(animator, in: &context, size: size)
             }
         }
         .drawingGroup()
         .pausesWhenIdle(phase: phase, paused: $paused)
     }
 
-    private func draw(in context: inout GraphicsContext, size: CGSize) {
+    static func draw(_ animator: MoodAnimator, in context: inout GraphicsContext, size: CGSize) {
         let mood = animator.mood
         let level = animator.level
         let t = animator.clock
@@ -153,7 +165,7 @@ struct MistOrb: View {
             layer.addFilter(.blur(radius: radius * 0.45))
             let r = radius * 1.35
             layer.fill(
-                blob(center: center, radius: r, wobble: wobble * 0.6, t: t * 0.6, seed: 11),
+                blob(center: center, radius: r, wobble: wobble * 0.6, t: t * 0.6, seed: 11, rotation: animator.rotation),
                 with: .radialGradient(
                     Gradient(colors: [mood.mid.color(0.55), mood.edge.color(0.3), mood.edge.color(0)]),
                     center: center, startRadius: 0, endRadius: r * 1.1))
@@ -167,7 +179,7 @@ struct MistOrb: View {
                 let r = radius * (i == 0 ? 1.0 : 0.94)
                 let lightSource = CGPoint(x: center.x - r * 0.18, y: center.y - r * 0.22)
                 layer.fill(
-                    blob(center: center, radius: r, wobble: wobble, t: t, seed: seed),
+                    blob(center: center, radius: r, wobble: wobble, t: t, seed: seed, rotation: animator.rotation),
                     with: .radialGradient(
                         Gradient(stops: [
                             .init(color: mood.core.color(i == 0 ? 0.95 : 0.35), location: 0),
@@ -185,7 +197,7 @@ struct MistOrb: View {
             let r = radius * (0.5 + 0.12 * level)
             let c = CGPoint(x: center.x - radius * 0.08, y: center.y - radius * 0.1)
             layer.fill(
-                blob(center: c, radius: r, wobble: wobble * 0.8, t: t * 1.3, seed: 7),
+                blob(center: c, radius: r, wobble: wobble * 0.8, t: t * 1.3, seed: 7, rotation: animator.rotation),
                 with: .radialGradient(
                     Gradient(colors: [RGBA.hex(0xFFFFFF).color(0.85), mood.core.color(0.4), mood.core.color(0)]),
                     center: c, startRadius: 0, endRadius: r))
@@ -193,9 +205,9 @@ struct MistOrb: View {
     }
 
     /// A closed blob whose radius is modulated by a few slowly drifting sine harmonics.
-    private func blob(center: CGPoint, radius: Double, wobble: Double, t: Double, seed: Double) -> Path {
+    private static func blob(center: CGPoint, radius: Double, wobble: Double, t: Double, seed: Double,
+                             rotation: Double) -> Path {
         let points = 120
-        let rotation = animator.rotation
         let harmonics: [(k: Double, speed: Double, weight: Double)] = [
             (2, 0.9, 0.55), (3, -1.3, 0.45), (5, 1.7, 0.3), (7, -2.3, 0.2), (11, 2.9, 0.1),
         ]
@@ -238,9 +250,12 @@ struct GlowWaves: View {
                 for strand in 0..<3 {
                     let path = wave(size: size, amplitude: amplitude * [1, 0.7, 0.45][strand],
                                     frequency: [1.6, 2.1, 2.7][strand], phase: animator.clock * 3 + Double(strand) * 1.9)
-                    context.drawLayer { glow in
-                        glow.addFilter(.blur(radius: 4))
-                        glow.stroke(path, with: shading, lineWidth: 3)
+                    // The glow is a few wide, faint strokes rather than a blurred layer:
+                    // a blur is an offscreen pass per strand, every frame, on the GPU.
+                    var glow = context
+                    for (width, opacity) in [(9.0, 0.06), (5.0, 0.12), (3.0, 0.2)] {
+                        glow.opacity = opacity
+                        glow.stroke(path, with: shading, style: StrokeStyle(lineWidth: width, lineCap: .round))
                     }
                     context.stroke(path, with: shading, lineWidth: strand == 0 ? 1.4 : 0.9)
                 }

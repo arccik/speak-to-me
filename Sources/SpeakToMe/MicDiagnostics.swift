@@ -15,19 +15,39 @@ enum MicDiagnostics {
         do {
             let samples = SampleCounter()
             audio.onMicSamples = { samples.add($0.count) }
-            try audio.start()
+            try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
+                audio.start { error in
+                    if let error { done.resume(throwing: error) } else { done.resume() }
+                }
+            }
             out.append("AudioIO start: OK, echo cancellation \(audio.echoCancellationActive ? "on" : "off")")
             try? await Task.sleep(for: .milliseconds(500))
             out.append("mic samples in 0.5 s at start: \(samples.take())")
             // A reply turns echo cancellation on; once it's over, it turns off again.
-            audio.play([Float](repeating: 0, count: 2_400))
-            out.append("while replying: echo cancellation \(audio.echoCancellationActive ? "on" : "off")")
+            // The timings show how long each switch holds up the main thread (the UI).
+            var monitor = await MainActor.run { StallMonitor() }
+            let switchOn = await MainActor.run { () -> Double in
+                let t = CACurrentMediaTime()
+                audio.play([Float](repeating: 0, count: 2_400))
+                return (CACurrentMediaTime() - t) * 1000
+            }
+            let onAt = CACurrentMediaTime()
+            while !audio.echoCancellationActive, CACurrentMediaTime() - onAt < 5 { try? await Task.sleep(for: .milliseconds(5)) }
+            out.append(String(format: "echo cancellation on: play() blocked the main thread %.0f ms, active after %.0f ms",
+                              switchOn, (CACurrentMediaTime() - onAt) * 1000 + switchOn))
             try? await Task.sleep(for: .milliseconds(500))
+            var stalls = monitor.finish()
+            out.append(String(format: "  main thread while switching on: longest stall %.0f ms", stalls.max))
+            out.append("while replying: echo cancellation \(audio.echoCancellationActive ? "on" : "off")")
             let before = samples.take()
+            monitor = await MainActor.run { StallMonitor() }
             audio.relaxEchoCancellation(after: 0.2)
             try? await Task.sleep(for: .milliseconds(800))
             out.append("mic samples while switching: \(samples.take())")
-            try? await Task.sleep(for: .milliseconds(3000))
+            try? await Task.sleep(for: .milliseconds(1500))
+            stalls = monitor.finish()
+            out.append(String(format: "  main thread while switching off: longest stall %.0f ms", stalls.max))
+            try? await Task.sleep(for: .milliseconds(1500))
             _ = samples.take()
             try? await Task.sleep(for: .milliseconds(500))
             out.append("after reply: echo cancellation \(audio.echoCancellationActive ? "on" : "off")")

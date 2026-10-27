@@ -14,7 +14,7 @@ enum Theme {
 }
 
 struct ContentView: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
 
     var body: some View {
@@ -69,7 +69,7 @@ struct ContentView: View {
 
 /// Deep navy, with a soft glow behind the orb that takes on the colour of the current phase.
 private struct Backdrop: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
 
     var body: some View {
@@ -94,7 +94,7 @@ private struct Backdrop: View {
 // MARK: - Top bar
 
 private struct TopBar: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @ObservedObject private var shortcuts = Shortcuts.shared
     @AppStorage("chatOpen") private var chatOpen = false
 
@@ -158,7 +158,7 @@ private struct TopIconLabel: View {
 
 /// Past conversations, newest first. Click to reopen, right-click to delete.
 private struct HistoryButton: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @State private var open = false
 
     var body: some View {
@@ -216,7 +216,7 @@ private struct HistoryButton: View {
 }
 
 private struct ModelMenu: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
         Menu {
@@ -276,7 +276,7 @@ private struct ModelMenu: View {
 
 /// One quiet line under the orb; the orb itself carries the mood.
 private struct StatusLabel: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
         VStack(spacing: 8) {
@@ -350,14 +350,17 @@ private struct StatusLabel: View {
 // MARK: - Transcript
 
 private struct Transcript: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
         Group {
             if Snapshots.isRendering {
                 VStack(alignment: .leading, spacing: 18) {
                     Spacer(minLength: 0)
-                    ForEach(session.lines) { MessageRow(line: $0, isLive: isLive($0), isLast: $0.id == session.lines.last?.id) }
+                    ForEach(session.lines) {
+                        MessageRow(line: $0, isLive: isLive($0), isLast: $0.id == session.lines.last?.id,
+                                   isStreaming: $0.id == session.streamingLineID)
+                    }
                     LiveUserText()
                 }
                 .padding(.horizontal, 22)
@@ -368,7 +371,8 @@ private struct Transcript: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 18) {
                             ForEach(session.lines) { line in
-                                MessageRow(line: line, isLive: isLive(line), isLast: line.id == session.lines.last?.id)
+                                MessageRow(line: line, isLive: isLive(line), isLast: line.id == session.lines.last?.id,
+                                           isStreaming: line.id == session.streamingLineID)
                                     .id(line.id)
                                     .transition(.asymmetric(
                                         insertion: .opacity.combined(with: .offset(y: 12)),
@@ -387,15 +391,7 @@ private struct Transcript: View {
                             stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08),
                                     .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
                             startPoint: .top, endPoint: .bottom))
-                    .onChange(of: session.lines.last?.text) {
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
-                    }
-                    .onChange(of: session.liveText) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                    .onChange(of: session.lines.count) {
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
-                    }
+                    .background(FollowLatest(proxy: proxy))
                 }
             }
         }
@@ -408,9 +404,29 @@ private struct Transcript: View {
     }
 }
 
+/// Keeps the newest words in view. A view of its own, so text streaming in redraws only
+/// this, not the whole transcript. New messages glide into view; streaming text, which
+/// grows ~15 times a second, follows without animation so scrolls don't pile up.
+private struct FollowLatest: View {
+    @Environment(VoiceSession.self) private var session
+    let proxy: ScrollViewProxy
+
+    var body: some View {
+        Color.clear
+            .onChange(of: session.lines.count) {
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: session.lines.last?.text) {
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: session.streamingText) { proxy.scrollTo("bottom", anchor: .bottom) }
+            .onChange(of: session.liveText) { proxy.scrollTo("bottom", anchor: .bottom) }
+    }
+}
+
 /// Your words appearing as you speak, before the turn is final.
 private struct LiveUserText: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
         if let text = session.liveText, !text.isEmpty {
@@ -435,7 +451,7 @@ private struct LiveUserText: View {
 }
 
 private struct EmptyState: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
         VStack(spacing: 14) {
@@ -464,7 +480,7 @@ private struct EmptyState: View {
 /// With the chat closed, only what's being said right now: your words as you speak,
 /// or the latest reply. Long replies keep their newest words in view; click to open the chat.
 private struct Caption: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
     @State private var hovering = false
 
@@ -483,7 +499,7 @@ private struct Caption: View {
         guard let line = session.lines.last else { return nil }
         let speaking = line.role == "assistant" && !line.interrupted
             && (session.phase == .thinking || session.phase == .speaking)
-        return Current(id: line.id.uuidString, role: line.role, text: line.text, live: speaking,
+        return Current(id: line.id.uuidString, role: line.role, text: session.currentText(of: line), live: speaking,
                        interrupted: line.interrupted)
     }
 
@@ -583,10 +599,12 @@ private struct SuggestionChip: View {
 }
 
 private struct MessageRow: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     let line: VoiceSession.Line
     let isLive: Bool
     let isLast: Bool
+    /// The reply is still streaming in: its text comes from `ReplyText`.
+    var isStreaming = false
     @State private var hovering = false
 
     var body: some View {
@@ -630,15 +648,10 @@ private struct MessageRow: View {
     private var assistant: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                if line.text.isEmpty {
-                    TypingDots()
+                if isStreaming {
+                    StreamingReply(isLive: isLive)
                 } else {
-                    (Text(line.text) + Text(isLive ? " ▍" : "").foregroundColor(Theme.accent))
-                        .font(.system(size: 15))
-                        .lineSpacing(5)
-                        .foregroundStyle(Color.white.opacity(line.interrupted ? 0.5 : isLive ? 0.95 : 0.82))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    ReplyText(text: line.text, isLive: isLive, interrupted: line.interrupted)
                 }
                 if let note = line.note { NoteLabel(text: note, systemImage: "wrench.and.screwdriver") }
                 if line.interrupted {
@@ -684,6 +697,36 @@ private struct MessageRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// The reply that's being written, read straight from the session so only this redraws
+/// as tokens arrive.
+private struct StreamingReply: View {
+    @Environment(VoiceSession.self) private var session
+    let isLive: Bool
+
+    var body: some View {
+        ReplyText(text: session.streamingText, isLive: isLive, interrupted: false)
+    }
+}
+
+private struct ReplyText: View {
+    let text: String
+    let isLive: Bool
+    let interrupted: Bool
+
+    var body: some View {
+        if text.isEmpty {
+            TypingDots()
+        } else {
+            (Text(text) + Text(isLive ? " ▍" : "").foregroundColor(Theme.accent))
+                .font(.system(size: 15))
+                .lineSpacing(5)
+                .foregroundStyle(Color.white.opacity(interrupted ? 0.5 : isLive ? 0.95 : 0.82))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -819,7 +862,7 @@ enum SpaceKey {
 /// Voice first: a big piece of the orb in the middle, with the voice waves flowing out of it.
 /// Typing is one click away on the keyboard button, and Esc folds it back into voice.
 private struct Dock: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @ObservedObject private var shortcuts = Shortcuts.shared
     @FocusState private var focused: Bool
     @State private var typing = false

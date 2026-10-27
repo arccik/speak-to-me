@@ -41,7 +41,7 @@ enum Snapshots {
             session.modelID = "gemma-4-26b-a4b-it-4bit"
             session.levels.mic = mic
             session.levels.speaker = speaker
-            let view = ContentView().environmentObject(session).frame(width: 520, height: 800)
+            let view = ContentView().environment(session).frame(width: 520, height: 800)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2
             guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
@@ -49,7 +49,37 @@ enum Snapshots {
             else { continue }
             try? png.write(to: dir.appendingPathComponent("\(name).png"))
         }
+        renderOrbs(to: dir)
         renderSettings(to: dir)
+    }
+
+    /// The Metal orb next to the Canvas one it imitates (left), over the window's background.
+    private static func renderOrbs(to dir: URL) {
+        guard let metal = OrbRenderer.shared else { return }
+        let points = 460, scale = 2
+        for (name, phase, level) in [("ready", VoiceSession.Phase.ready, 0.0), ("listening", .listening, 0.5),
+                                     ("thinking", .thinking, 0.2), ("speaking", .speaking, 0.7)] {
+            let animator = MoodAnimator()
+            animator.step(to: .of(phase), level: level, now: 0)
+            let canvas = Canvas { context, size in MistOrb.draw(animator, in: &context, size: size) }
+                .frame(width: CGFloat(points), height: CGFloat(points))
+            let renderer = ImageRenderer(content: canvas)
+            renderer.scale = CGFloat(scale)
+            let pixels = points * scale
+            guard let reference = renderer.cgImage, let shaded = metal.image(of: animator, pixels: pixels),
+                  let context = CGContext(data: nil, width: pixels * 2, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { continue }
+            context.setFillColor(CGColor(srgbRed: 0x10 / 255, green: 0x13 / 255, blue: 0x2A / 255, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: pixels * 2, height: pixels))
+            context.draw(reference, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+            context.draw(shaded, in: CGRect(x: pixels, y: 0, width: pixels, height: pixels))
+            guard let image = context.makeImage(),
+                  let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+            else { continue }
+            try? png.write(to: dir.appendingPathComponent("orb-\(name).png"))
+        }
     }
 
     /// Forms and lists are AppKit-backed, which ImageRenderer can't draw, so these go
@@ -70,7 +100,7 @@ enum Snapshots {
                 exit(0)
             }
             UserDefaults.standard.set(panes[index].rawValue, forKey: "settingsPane")
-            window.contentView = NSHostingView(rootView: SettingsView().environmentObject(session))
+            window.contentView = NSHostingView(rootView: SettingsView().environment(session))
             window.orderFrontRegardless()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 MainActor.assumeIsolated {

@@ -43,13 +43,13 @@ final class MiniOrbController {
             let frame = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x: frame.maxX - size.width - 24, y: frame.minY + 24))
         }
-        panel.contentView = NSHostingView(rootView: MiniOrbView().environmentObject(session))
+        panel.contentView = NSHostingView(rootView: MiniOrbView().environment(session))
         return panel
     }
 }
 
 private struct MiniOrbView: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @ObservedObject private var shortcuts = Shortcuts.shared
 
     var body: some View {
@@ -105,9 +105,10 @@ private struct MiniOrbView: View {
     private var snippet: String? {
         if let live = session.liveText, !live.isEmpty { return live }
         guard session.phase == .speaking || session.phase == .thinking,
-              let last = session.lines.last, last.role == "assistant", !last.text.isEmpty
+              let last = session.lines.last, last.role == "assistant"
         else { return nil }
-        return String(last.text.suffix(90))
+        let text = session.currentText(of: last)
+        return text.isEmpty ? nil : String(text.suffix(90))
     }
 }
 

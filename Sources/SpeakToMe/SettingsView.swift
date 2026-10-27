@@ -156,12 +156,13 @@ private struct Footer: View {
 // MARK: - General
 
 private struct GeneralPane: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
     @AppStorage("orbOnHotKey") private var orbOnHotKey = true
     @State private var orbVisible = MiniOrbController.shared.isVisible
     @State private var confirmDelete = false
 
     var body: some View {
+        @Bindable var session = session
         Form {
             PaneHeader(pane: .general)
             Section("Sounds") {
@@ -264,7 +265,7 @@ private struct KeyRow: View {
 // MARK: - Voice
 
 private struct VoicePane: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     /// Preview lines for the voice for other languages, in the conversation's language.
     private static let previews = [
@@ -289,6 +290,7 @@ private struct VoicePane: View {
     }
 
     var body: some View {
+        @Bindable var session = session
         Form {
             PaneHeader(pane: .voice)
             Section {
@@ -350,9 +352,10 @@ private struct VoicePane: View {
 
 /// Record (or pick) a sample of your voice, then hear replies in it.
 private struct MyVoiceSection: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
+        @Bindable var session = session
         Section {
             Toggle("Speak replies in my voice", isOn: $session.useMyVoice)
                 .disabled(!session.hasMyVoice)
@@ -403,7 +406,7 @@ private struct MyVoiceSection: View {
 // MARK: - Conversation
 
 private struct ConversationPane: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     private static let rule = " Never use markdown, lists, headings, code blocks or emoji: everything you write is read aloud."
 
@@ -419,6 +422,7 @@ private struct ConversationPane: View {
     }
 
     var body: some View {
+        @Bindable var session = session
         Form {
             PaneHeader(pane: .conversation)
             Section {
@@ -484,9 +488,10 @@ private struct PresetChip: View {
 // MARK: - Model
 
 private struct ModelPane: View {
-    @EnvironmentObject private var session: VoiceSession
+    @Environment(VoiceSession.self) private var session
 
     var body: some View {
+        @Bindable var session = session
         Form {
             PaneHeader(pane: .model)
             Section {
