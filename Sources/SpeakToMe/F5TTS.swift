@@ -90,14 +90,23 @@ final class F5TTS {
         // Sway sampling (coefficient -1) spends the steps early on, where they matter most.
         let t = linspace(Float(0), Float(1), count: steps)
         let times = 1 - cos(Float.pi / 2 * t)
+        // At the fastest setting, guidance runs only while the speech is taking shape. With
+        // any fewer than 3 steps of it, words start to change.
+        let guidedSteps = steps <= 8 ? 3 : steps - 1
         for i in 0..<(steps - 1) {
             let time = transformer.timeEmbedding(times[i][.newAxis])
-            let both = transformer(
-                concatenated([y, y], axis: 0), cond: bothCond, text: bothText,
-                time: concatenated([time, time], axis: 0), rope: rope)
-            let flows = both.split(parts: 2, axis: 0)
-            // Classifier-free guidance, strength 2.
-            y = y + (times[i + 1] - times[i]) * (flows[0] + (flows[0] - flows[1]) * 2)
+            let flow: MLXArray
+            if i < guidedSteps {
+                let both = transformer(
+                    concatenated([y, y], axis: 0), cond: bothCond, text: bothText,
+                    time: concatenated([time, time], axis: 0), rope: rope)
+                let flows = both.split(parts: 2, axis: 0)
+                // Classifier-free guidance, strength 2.
+                flow = flows[0] + (flows[0] - flows[1]) * 2
+            } else {
+                flow = transformer(y, cond: stepCond, text: spoken, time: time, rope: rope)
+            }
+            y = y + (times[i + 1] - times[i]) * flow
             eval(y)
         }
 

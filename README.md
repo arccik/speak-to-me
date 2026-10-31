@@ -98,6 +98,7 @@ Drives the real conversation loop with typed messages (time, web search, a joke,
 | `--langtest` | Language detection and macOS voice per language |
 | `--speechtest [dir]` | Every speech model choice per language group on one running instance, with what Parakeet hears back; writes WAVs to `dir` |
 | `--f5test <modelDir> <ref.wav> <refText> <dir>` | F5-TTS alone with a fixed seed, to compare with another implementation; writes WAVs to `dir` |
+| `--replytest <model> [engine]` | Where the wait goes in a Russian spoken reply, with the language model and voice running together |
 | `--f5switchtest` | Through the real session: choose F5-TTS Russian, time it idle and while oMLX writes, kill its helper, switch away and check the helper is gone |
 | `--clonetest <dir>` | Clones a voice from a Kokoro-made sample; writes `sample.wav` and `cloned.wav` |
 | `--snapshot <dir>` | Renders the window in several states to PNGs |

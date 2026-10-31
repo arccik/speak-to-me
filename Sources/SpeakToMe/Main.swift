@@ -30,6 +30,12 @@ enum Main {
             Task.detached { await SelfTest.languages(writingTo: dir) }
             dispatchMain()
         }
+        if let flag = args.firstIndex(of: "--replytest"), args.indices.contains(flag + 1) {
+            let engine = args.indices.contains(flag + 2) ? SpeechEngine(rawValue: args[flag + 2]) ?? .f5Russian : .f5Russian
+            let model = args[flag + 1]
+            Task.detached { await SelfTest.replyTiming(model: model, engine: engine) }
+            dispatchMain()
+        }
         if args.contains("--f5switchtest") {
             Task { @MainActor in await SelfTest.f5Switching() }
             dispatchMain()

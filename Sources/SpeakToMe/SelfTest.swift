@@ -145,6 +145,66 @@ extension SelfTest {
 }
 
 extension SelfTest {
+    /// `SpeakToMe --replytest <model> [engine]`: where the wait goes in a Russian spoken reply,
+    /// with the language model and the voice running at the same time, as they do in a real
+    /// conversation. Prints when each piece would be ready and any silence between them.
+    static func replyTiming(model: String, engine: SpeechEngine) async {
+        let speech: SpeechModels
+        do { speech = try await SpeechModels.load(voice: "af_heart") { _ in } } catch {
+            print("load failed: \(error)"); exit(1)
+        }
+        let setup = SpeechSetup(engines: [.russian: engine], speed: 1.15)
+        try? await speech.prepare(engine, using: setup)
+        let client = OMLXClient.fromSettings()
+        try? await client.warmUp(model: model)
+        let system = await VoiceSession.defaultPrompt + " Always reply in the same language the user speaks to you in."
+        for question in ["Какая самая высокая гора в Европе?", "Расскажи коротко, почему небо голубое.", "Как дела? Что посоветуешь приготовить на ужин?"] {
+            print("Q: \(question)")
+            let spoken = (try? await speech.multilingual.speak(question, language: "ru", voice: "F1", speed: 1)) ?? []
+            let start = Date()
+            func now() -> Int { Int(Date().timeIntervalSince(start) * 1000) }
+            let heard = (try? await speech.transcribe(Resampler.convert(spoken, from: 24_000, to: 16_000))) ?? question
+            print("  transcribed at \(now()) ms")
+            let (sentences, sink) = AsyncStream<String>.makeStream()
+            let voice = Task {
+                var playingUntil: Int?
+                for await sentence in sentences {
+                    let began = now()
+                    let audio = (try? await speech.speak(sentence, language: "ru", using: setup)) ?? []
+                    let ready = now(), length = audio.count / 24
+                    let gap = playingUntil.map { max(0, ready - $0) }
+                    if playingUntil == nil { print("  FIRST AUDIO at \(ready) ms") }
+                    print("  voice \(ready - began) ms for \(length) ms of audio, silence before it \(gap ?? 0) ms: \(sentence.prefix(50))")
+                    playingUntil = max(playingUntil ?? 0, ready) + length
+                }
+            }
+            var chunker = SentenceChunker()
+            var first = true, tokens = 0
+            do {
+                for try await event in client.streamChat(
+                    model: model, messages: [.init(role: "system", content: system), .init(role: "user", content: heard)],
+                    tools: Tools.definitions) {
+                    guard case .text(let token) = event else { continue }
+                    if first { print("  first word from the model at \(now()) ms"); first = false }
+                    tokens += 1
+                    for sentence in chunker.push(token) {
+                        print("  sentence ready at \(now()) ms")
+                        sink.yield(sentence)
+                    }
+                }
+            } catch { print("  model failed: \(error.localizedDescription)") }
+            for sentence in chunker.finish() { sink.yield(sentence) }
+            print("  model finished at \(now()) ms, \(tokens) tokens")
+            sink.finish()
+            await voice.value
+        }
+        await speech.f5Russian.stop()
+        await speech.tts.stop()
+        exit(0)
+    }
+}
+
+extension SelfTest {
     /// `SpeakToMe --speechtest`: every model choice for every language group, switched on
     /// one running set of models, with what Parakeet hears back. With a folder, also
     /// writes each as a WAV to compare by ear.

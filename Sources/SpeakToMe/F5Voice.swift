@@ -45,9 +45,9 @@ actor F5RussianVoice {
     static let installedMarker = "\(folderName)/model_v1.safetensors"
 
     /// What the reference clip says. Generating time grows with its length, so it's short.
-    static let referenceText = "Сегодня хорошая погода, можно прогуляться."
+    static let referenceText = "Сегодня хорошая погода."
     /// The same, marked, for reading alongside marked text.
-    static let markedReferenceText = "Сег+одня хор+ошая пог+ода, м+ожно прогул+яться."
+    static let markedReferenceText = "Сег+одня хор+ошая пог+ода."
 
     private let multilingual: MultilingualVoices
     private var worker: Task<WorkerProcess, Error>?
@@ -103,7 +103,7 @@ actor F5RussianVoice {
 
     /// The model learns how to sound from a clip, so one is made with the matching Supertonic-3 voice.
     private func referenceClip(voice: String) async throws -> URL {
-        let clip = Self.folder.appendingPathComponent("reference-\(voice).wav")
+        let clip = Self.folder.appendingPathComponent("short-reference-\(voice).wav")
         if FileManager.default.fileExists(atPath: clip.path) { return clip }
         let samples = try await multilingual.speak(Self.referenceText, language: "ru", voice: voice, speed: 1)
         try WAV.data(samples, sampleRate: F5TTS.sampleRate).write(to: clip, options: .atomic)
