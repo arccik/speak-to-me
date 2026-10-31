@@ -88,6 +88,7 @@ enum Snapshots {
         let session = VoiceSession()
         session.models = [.init(id: "gemma-4-26b-a4b-it-4bit", sizeBytes: 16_108_266_064)]
         session.modelID = "gemma-4-26b-a4b-it-4bit"
+        session.showEngineForSnapshot(.f5Russian, for: .russian, state: .downloading(0.42))
         let panes = SettingsView.Pane.allCases
         let original = UserDefaults.standard.string(forKey: "settingsPane")
         let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 720, height: 560),

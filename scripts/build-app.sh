@@ -5,11 +5,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release
+scripts/build-mlx-shaders.sh .build/mlx.metallib
 
 APP=build/SpeakToMe.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/SpeakToMe "$APP/Contents/MacOS/"
+cp .build/release/SpeakToMe .build/mlx.metallib "$APP/Contents/MacOS/"
 cp -R .build/release/*.bundle "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] || scripts/make-icns.sh
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"

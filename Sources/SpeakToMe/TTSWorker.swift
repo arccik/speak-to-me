@@ -57,6 +57,12 @@ actor TTSWorker {
         _ = try await worker.send(["clone": sample.path, "out": output.path])
     }
 
+    /// Downloads and loads PocketTTS ahead of the first sentence.
+    func prepareMyVoice() async throws {
+        let worker = try await liveWorker()
+        _ = try await worker.send(["prepareClone": true])
+    }
+
     private func liveWorker() async throws -> WorkerProcess {
         if let active { return active }
         let next: WorkerProcess
@@ -102,7 +108,7 @@ actor WorkerProcess {
         }
     }
 
-    private let voice: String
+    private let arguments: [String]
     private var process: Process?
     private var input: FileHandle?
     private var buffer = Data()
@@ -112,14 +118,19 @@ actor WorkerProcess {
     private var progress: (@Sendable (String) -> Void)?
 
     init(voice: String) {
-        self.voice = voice
+        arguments = ["--tts-worker", voice]
+    }
+
+    /// A helper speaking this same protocol, started with other `arguments`.
+    init(arguments: [String]) {
+        self.arguments = arguments
     }
 
     func start(progress: (@Sendable (String) -> Void)? = nil) async throws {
         self.progress = progress
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        process.arguments = ["--tts-worker", voice]
+        process.arguments = arguments
         let stdin = Pipe(), stdout = Pipe()
         process.standardInput = stdin
         process.standardOutput = stdout
@@ -145,7 +156,14 @@ actor WorkerProcess {
     func stop() {
         process?.terminationHandler = nil
         process?.terminate()
-        process = nil
+        // Nothing waiting on an answer should wait forever.
+        terminated()
+    }
+
+    func request(_ text: String, options: [String: Any]) async throws -> [Float] {
+        var line = options
+        line["text"] = text
+        return try await send(line)
     }
 
     func request(_ text: String, voice: String, speed: Float, clonedVoice: String? = nil) async throws -> [Float] {
@@ -217,6 +235,15 @@ actor WorkerProcess {
         }
     }
 
+    /// How a helper hands back its samples.
+    static func pcmBase64(_ samples: [Float]) -> String {
+        var pcm = Data(count: samples.count * 2)
+        pcm.withUnsafeMutableBytes { raw in
+            let out = raw.bindMemory(to: Int16.self)
+            for (i, s) in samples.enumerated() { out[i] = Int16(max(-1, min(1, s)) * 32_767) }
+        }
+        return pcm.base64EncodedString()
+    }
 }
 
 extension TTSWorker {
@@ -262,6 +289,11 @@ extension TTSWorker {
                             send(["id": id, "ok": true])
                             continue
                         }
+                        if json["prepareClone"] != nil {
+                            try await cloned.prepare()
+                            send(["id": id, "ok": true])
+                            continue
+                        }
                         guard let text = json["text"] as? String else { continue }
                         let speed = (json["speed"] as? NSNumber)?.floatValue ?? 1
                         let samples: [Float]
@@ -272,12 +304,7 @@ extension TTSWorker {
                                 text: text, voice: json["voice"] as? String ?? voice, speed: speed
                             ).samples
                         }
-                        var pcm = Data(count: samples.count * 2)
-                        pcm.withUnsafeMutableBytes { raw in
-                            let out = raw.bindMemory(to: Int16.self)
-                            for (i, s) in samples.enumerated() { out[i] = Int16(max(-1, min(1, s)) * 32_767) }
-                        }
-                        send(["id": id, "pcm": pcm.base64EncodedString()])
+                        send(["id": id, "pcm": WorkerProcess.pcmBase64(samples)])
                     } catch {
                         send(["id": id, "error": error.localizedDescription])
                     }
@@ -303,6 +330,10 @@ private actor ClonedVoices {
         try await manager.initialize()
         self.manager = manager
         return manager
+    }
+
+    func prepare() async throws {
+        _ = try await ready()
     }
 
     func clone(sample: URL, to output: URL) async throws {

@@ -267,8 +267,9 @@ private struct KeyRow: View {
 private struct VoicePane: View {
     @Environment(VoiceSession.self) private var session
 
-    /// Preview lines for the voice for other languages, in the conversation's language.
+    /// Preview lines for the non-English models, in the conversation's language where possible.
     private static let previews = [
+        "en": "Hi! This is how I'll sound when we talk.",
         "ru": "Привет! Вот так я буду звучать, когда мы говорим по-русски.",
         "uk": "Привіт! Ось так я звучатиму, коли ми говоримо українською.",
         "pl": "Cześć! Tak będę brzmieć, kiedy rozmawiamy po polsku.",
@@ -289,31 +290,79 @@ private struct VoicePane: View {
         return order.map { ($0, byGroup[$0]!) }
     }
 
+    private func preview(for slot: SpeechSlot) -> String {
+        Self.previews[language(of: slot)] ?? Self.previews["pl"]!
+    }
+
+    private func language(of slot: SpeechSlot) -> String {
+        switch slot {
+        case .english: return "en"
+        case .russian: return "ru"
+        case .other: return SpeechSlot(language: session.language) == .other ? session.language : "pl"
+        }
+    }
+
+    private func binding(for slot: SpeechSlot) -> Binding<SpeechEngine> {
+        Binding(
+            get: { session.speechEngines[slot] ?? slot.engines[0] },
+            set: { session.setEngine($0, for: slot) })
+    }
+
+    private func speechModelRow(_ slot: SpeechSlot) -> some View {
+        let engine = session.speechEngines[slot] ?? slot.engines[0]
+        return VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(slot.title) {
+                HStack(spacing: 8) {
+                    Picker(slot.title, selection: binding(for: slot)) {
+                        ForEach(slot.engines) { option in
+                            Text(option.name)
+                                .tag(option)
+                                .disabled(option == .myVoice && !session.hasMyVoice)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    Button {
+                        session.readAloud(preview(for: slot))
+                    } label: {
+                        Label("Preview", systemImage: "play.fill")
+                    }
+                    .disabled(!session.canToggle || (slot != .english && !session.matchLanguage))
+                    .help("Hear this model")
+                }
+            }
+            SpeechModelStatus(engine: engine, language: language(of: slot))
+        }
+    }
+
     var body: some View {
         @Bindable var session = session
         Form {
             PaneHeader(pane: .voice)
             Section {
-                LabeledContent("Voice") {
-                    HStack(spacing: 8) {
-                        Picker("Voice", selection: $session.voice) {
-                            ForEach(groups, id: \.0) { group, ids in
-                                Section(group.capitalized) {
-                                    ForEach(ids, id: \.self) {
-                                        Text(VoiceSession.voiceName($0).components(separatedBy: " · ").first ?? $0).tag($0)
-                                    }
+                ForEach(SpeechSlot.allCases) { speechModelRow($0) }
+            } header: {
+                Text("Speech models")
+            } footer: {
+                Footer("Applies from the next reply. If a model can't speak a sentence, the next available one does. Supertonic-3 covers 31 languages; macOS voices can be improved in System Settings → Accessibility → Spoken Content. F5-TTS Russian sounds the most natural but takes a few seconds per sentence and about 3 GB of memory while it's chosen; for non-commercial use.")
+            }
+            Section {
+                if session.speechEngines[.english] == .kokoro {
+                    Picker("Kokoro voice", selection: $session.voice) {
+                        ForEach(groups, id: \.0) { group, ids in
+                            Section(group.capitalized) {
+                                ForEach(ids, id: \.self) {
+                                    Text(VoiceSession.voiceName($0).components(separatedBy: " · ").first ?? $0).tag($0)
                                 }
                             }
                         }
-                        .labelsHidden()
-                        .fixedSize()
-                        Button {
-                            session.readAloud("Hi! This is how I'll sound when we talk.")
-                        } label: {
-                            Label("Preview", systemImage: "play.fill")
+                    }
+                }
+                if session.speechEngines[.russian] != .macOS || session.speechEngines[.other] == .supertonic {
+                    Picker("Voice for other languages", selection: $session.languageVoice) {
+                        ForEach(MultilingualVoices.voices, id: \.self) { id in
+                            Text("\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())").tag(id)
                         }
-                        .disabled(!session.canToggle)
-                        .help("Hear this voice")
                     }
                 }
                 LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
@@ -322,31 +371,58 @@ private struct VoicePane: View {
             Section {
                 Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
                 LabeledContent("Current language", value: LanguageDetector.name(session.language))
-                LabeledContent("Voice for other languages") {
-                    HStack(spacing: 8) {
-                        Picker("Voice for other languages", selection: $session.languageVoice) {
-                            ForEach(MultilingualVoices.voices, id: \.self) { id in
-                                Text("\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())").tag(id)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        Button {
-                            session.readAloud(Self.previews[session.language] ?? Self.previews["ru"]!)
-                        } label: {
-                            Label("Preview", systemImage: "play.fill")
-                        }
-                        .disabled(!session.canToggle || !session.matchLanguage)
-                        .help("Hear this voice")
-                    }
-                }
             } header: {
                 Text("Language")
-            } footer: {
-                Footer("English uses the voice above. Russian, Ukrainian, Polish, German, French, Spanish and 24 more languages use the voice for other languages (downloaded on first use, about 200 MB). Anything else uses a macOS voice.")
             }
             MyVoiceSection()
         }
+    }
+}
+
+/// One line under a speech model: whether it's ready, downloading or failed.
+private struct SpeechModelStatus: View {
+    @Environment(VoiceSession.self) private var session
+    let engine: SpeechEngine
+    let language: String
+
+    private var systemVoiceStatus: String {
+        guard let voice = SystemVoice.bestVoice(for: language) else {
+            return "No \(LanguageDetector.name(language)) voice installed. Add one in System Settings → Accessibility → Spoken Content."
+        }
+        return "Ready: \(voice.name)"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            switch session.state(of: engine) {
+            case .loading:
+                ProgressView().controlSize(.small)
+                Text("Loading…")
+            case .downloading(let fraction):
+                ProgressView(value: fraction).frame(width: 90).controlSize(.small)
+                Text("Downloading \(engine.downloadSize ?? "")… \(Int(fraction * 100))%")
+                    .monospacedDigit()
+            case .notDownloaded:
+                Text("Downloads when first used (\(engine.downloadSize ?? "")).")
+                Button("Download Now") { session.prepareEngine(engine) }
+                    .controlSize(.small)
+            case .failed(let message):
+                Text("Couldn't load: \(message)").foregroundStyle(.red)
+                Button("Try Again") { session.prepareEngine(engine) }
+                    .controlSize(.small)
+            case .ready:
+                if engine == .macOS {
+                    Text(systemVoiceStatus)
+                } else if engine == .myVoice && !session.hasMyVoice {
+                    Text("Record your voice below first.")
+                } else {
+                    Text("Ready")
+                }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -355,10 +431,7 @@ private struct MyVoiceSection: View {
     @Environment(VoiceSession.self) private var session
 
     var body: some View {
-        @Bindable var session = session
         Section {
-            Toggle("Speak replies in my voice", isOn: $session.useMyVoice)
-                .disabled(!session.hasMyVoice)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Read this aloud")
                     .font(.caption.weight(.semibold))
@@ -398,7 +471,7 @@ private struct MyVoiceSection: View {
         } header: {
             Text("Your voice")
         } footer: {
-            Footer("Read at your normal pace in a quiet room. Everything stays on this Mac. Used for English replies; a little slower than the built-in voices.")
+            Footer("Read at your normal pace in a quiet room. Everything stays on this Mac. Pick \"My voice\" under Speech models to use it for English replies; a little slower than the built-in voices.")
         }
     }
 }

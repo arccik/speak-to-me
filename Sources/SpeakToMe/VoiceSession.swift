@@ -91,8 +91,6 @@ final class VoiceSession {
     /// Talk over replies without headphones. macOS turns down other apps' audio
     /// (YouTube, music) while it's active, so it's only on while a reply is under way.
     var echoCancellation = StoredSetting.value("echoCancellation", default: true) { didSet { StoredSetting.store(echoCancellation, "echoCancellation") } }
-    /// Speak English replies in a voice cloned from your recording (PocketTTS).
-    var useMyVoice = StoredSetting.value("useMyVoice", default: false) { didSet { StoredSetting.store(useMyVoice, "useMyVoice") } }
     var myVoiceStatus: String?
     private(set) var myVoiceBusy = false
     /// The language of the conversation so far; sticks when a message is too short to tell.
@@ -209,6 +207,8 @@ final class VoiceSession {
             speech = try await SpeechModels.load(voice: voice) { message in
                 Task { @MainActor in self.phase = .loading(message) }
             }
+            for engine in enginesToPrepare { prepareEngine(engine) }
+            enginesToPrepare = []
             phase = .loading("Loading \(modelID) in oMLX…")
             await warm.value
             phase = .ready
@@ -256,6 +256,80 @@ final class VoiceSession {
         } catch {
             micNotice = "Couldn't pin the model in oMLX: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Speech models
+
+    enum EngineState: Equatable {
+        case notDownloaded, loading, ready
+        case downloading(Double)
+        case failed(String)
+    }
+
+    /// Which model speaks each language group. Read at the start of every reply, so a
+    /// change applies from the next reply on.
+    private(set) var speechEngines = Dictionary(uniqueKeysWithValues: SpeechSlot.allCases.map { ($0, $0.stored) })
+    /// Only what's been asked for this run; everything else is judged by what's on disk.
+    private var engineStates: [SpeechEngine: EngineState] = [:]
+    /// Chosen while the speech models were still loading.
+    private var enginesToPrepare: Set<SpeechEngine> = []
+
+    func state(of engine: SpeechEngine) -> EngineState {
+        engineStates[engine] ?? (engine.isInstalled ? .ready : .notDownloaded)
+    }
+
+    func setEngine(_ engine: SpeechEngine, for slot: SpeechSlot) {
+        speechEngines[slot] = engine
+        slot.stored = engine
+        prepareEngine(engine)
+        releaseUnusedF5()
+    }
+
+    /// F5-TTS holds a gigabyte or two for as long as its helper runs.
+    private func releaseUnusedF5() {
+        guard let speech, !speechEngines.values.contains(.f5Russian) else { return }
+        engineStates[.f5Russian] = nil
+        Task { await speech.f5Russian.stop() }
+    }
+
+    /// Downloads and loads `engine` in the background, reporting through `state(of:)`.
+    func prepareEngine(_ engine: SpeechEngine) {
+        guard let speech else { enginesToPrepare.insert(engine); return }
+        switch engineStates[engine] {
+        case .loading, .downloading, .ready: return
+        case .notDownloaded, .failed, nil: break
+        }
+        engineStates[engine] = engine.isInstalled ? .loading : .downloading(0)
+        let setup = speechSetup
+        Task {
+            do {
+                try await speech.prepare(engine, using: setup) { fraction in
+                    Task { @MainActor [weak self] in
+                        guard case .downloading = self?.engineStates[engine] else { return }
+                        self?.engineStates[engine] = fraction < 1 ? .downloading(fraction) : .loading
+                    }
+                }
+                engineStates[engine] = .ready
+                // Switched away while it was still on its way.
+                if engine == .f5Russian { releaseUnusedF5() }
+            } catch {
+                engineStates[engine] = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    var speechForTest: SpeechModels? { speech }
+
+    /// For Snapshots: shows a model mid-download without storing or fetching anything.
+    func showEngineForSnapshot(_ engine: SpeechEngine, for slot: SpeechSlot, state: EngineState) {
+        speechEngines[slot] = engine
+        engineStates[engine] = state
+    }
+
+    private var speechSetup: SpeechSetup {
+        SpeechSetup(
+            engines: speechEngines, voice: voice, languageVoice: languageVoice, speed: Float(speed),
+            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil)
     }
 
     // MARK: - Your own voice
@@ -318,9 +392,9 @@ final class VoiceSession {
         do {
             try FileManager.default.createDirectory(at: Self.myVoiceFolder, withIntermediateDirectories: true)
             try await speech.tts.clone(sample: sample, to: Self.myVoiceFile)
-            useMyVoice = true
-            myVoiceStatus = "Done! Replies in English now use your voice."
             myVoiceChanges += 1
+            setEngine(.myVoice, for: .english)
+            myVoiceStatus = "Done! Replies in English now use your voice."
         } catch {
             myVoiceStatus = "Couldn't learn the voice: \(error.localizedDescription)"
         }
@@ -328,7 +402,7 @@ final class VoiceSession {
 
     func deleteMyVoice() {
         try? FileManager.default.removeItem(at: Self.myVoiceFolder)
-        useMyVoice = false
+        if speechEngines[.english] == .myVoice { setEngine(.kokoro, for: .english) }
         myVoiceStatus = nil
         myVoiceChanges += 1
     }
@@ -446,15 +520,12 @@ final class VoiceSession {
         turn.spoke = true
         self.turn = turn
         phase = .thinking
-        let voice = voice, languageVoice = languageVoice, speed = Float(speed), turnLanguage = language
-        let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
+        let setup = speechSetup, turnLanguage = language
         turn.task = Task {
             var chunker = SentenceChunker()
             for sentence in chunker.push(text) + chunker.finish() {
                 let sentenceLanguage = matchLanguage ? LanguageDetector.detect(sentence) ?? turnLanguage : "en"
-                guard let samples = try? await speech.speak(
-                        sentence, voice: voice, speed: speed, language: sentenceLanguage,
-                        languageVoice: languageVoice, clonedVoice: clonedVoice),
+                guard let samples = try? await speech.speak(sentence, language: sentenceLanguage, using: setup),
                       !Task.isCancelled
                 else { if Task.isCancelled { return } else { continue } }
                 play(samples, for: turn)
@@ -757,7 +828,7 @@ final class VoiceSession {
             }
             if matchLanguage, let detected = LanguageDetector.detect(text) { language = detected }
             // Loads while the model thinks, so the reply's first sentence isn't held up.
-            if matchLanguage { speech.prepare(language: language, languageVoice: languageVoice) }
+            if matchLanguage, let engine = speechSetup.route(for: language).first { prepareEngine(engine) }
             var images: [Data] = []
             if attachScreenNext || ScreenVision.wantsScreen(text) {
                 guard currentModelSeesImages else { throw VisionUnavailable(model: modelID) }
@@ -791,8 +862,7 @@ final class VoiceSession {
     private func generate(_ turn: Turn, messages initial: [OMLXClient.Message], speech: SpeechModels) async throws {
         var messages = initial
         let (sentences, sentenceSink) = AsyncStream<String>.makeStream()
-        let voice = voice, languageVoice = languageVoice, speed = Float(speed), muted = muteReplies
-        let clonedVoice = useMyVoice && hasMyVoice ? Self.myVoiceFile.path : nil
+        let setup = speechSetup, muted = muteReplies
         let turnLanguage = matchLanguage ? language : "en"
         let ttsTask = Task {
             for await sentence in sentences {
@@ -800,8 +870,7 @@ final class VoiceSession {
                 // Per-sentence detection catches a reply that switches language; short ones follow the turn.
                 let sentenceLanguage = LanguageDetector.detect(sentence) ?? turnLanguage
                 guard let samples = try? await speech.speak(
-                        sentence, voice: voice, speed: speed, language: matchLanguage ? sentenceLanguage : "en",
-                        languageVoice: languageVoice, clonedVoice: clonedVoice),
+                        sentence, language: matchLanguage ? sentenceLanguage : "en", using: setup),
                       !Task.isCancelled
                 else { if Task.isCancelled { return } else { continue } }
                 if turn.committed { play(samples, for: turn) } else { turn.heldAudio.append(samples) }

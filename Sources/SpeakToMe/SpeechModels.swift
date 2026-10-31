@@ -8,16 +8,23 @@ import Foundation
 /// - Parakeet TDT v3: speech-to-text, 25 languages.
 /// - Kokoro 82M (ANE v3 pipeline): English text-to-speech, in a crash-isolated helper process.
 /// - Supertonic-3: text-to-speech for 30 other languages, loaded only when needed.
+/// - F5-TTS Russian: the exception, on the GPU through MLX, in a helper process of its own.
+///
+/// Which model speaks which language is the user's choice: see `SpeechEngine`.
 final class SpeechModels {
     let vad: VadManager
     let asr: AsrManager
     let tts: TTSWorker
-    let multilingual = MultilingualVoices()
+    let multilingual: MultilingualVoices
+    let f5Russian: F5RussianVoice
 
     private init(vad: VadManager, asr: AsrManager, tts: TTSWorker) {
         self.vad = vad
         self.asr = asr
         self.tts = tts
+        let multilingual = MultilingualVoices()
+        self.multilingual = multilingual
+        f5Russian = F5RussianVoice(multilingual: multilingual)
     }
 
     /// Our own model folder. FluidVoice's Core ML copies are an older build that
@@ -58,29 +65,53 @@ final class SpeechModels {
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Starts loading the voice for `language` in the background, so it's ready by the reply.
-    func prepare(language: String, languageVoice: String) {
-        guard MultilingualVoices.languages.contains(language) else { return }
-        Task { [multilingual] in try? await multilingual.prepare(voice: languageVoice) }
+    /// Downloads and loads `engine`, so it's ready by the time a reply needs it.
+    /// `progress` runs from 0 to 1 for a model that reports its download.
+    func prepare(
+        _ engine: SpeechEngine, using setup: SpeechSetup, progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws {
+        switch engine {
+        case .kokoro, .macOS: return
+        case .f5Russian: try await f5Russian.prepare(voice: setup.languageVoice, progress: progress)
+        case .myVoice: try await tts.prepareMyVoice()
+        case .supertonic: try await multilingual.prepare(voice: setup.languageVoice)
+        }
     }
 
-    /// English goes to Kokoro, the 30 other languages Supertonic-3 knows to Supertonic-3
-    /// (`languageVoice`), and anything else, or a Supertonic-3 failure, to a macOS system
-    /// voice when one exists. A cloned voice (PocketTTS, English only) replaces Kokoro when given.
-    func speak(
-        _ text: String, voice: String, speed: Float, language: String = "en",
-        languageVoice: String = MultilingualVoices.defaultVoice, clonedVoice: String? = nil
-    ) async throws -> [Float] {
-        if language != "en" {
-            if MultilingualVoices.languages.contains(language),
-               let samples = try? await multilingual.speak(text, language: language, voice: languageVoice, speed: speed),
-               !samples.isEmpty {
-                return samples
-            }
-            if SystemVoice.hasVoice(for: language) {
-                return await SystemVoice.speak(text, language: language, speed: speed)
+    /// Speaks with the model chosen for `language`, or the next that can (see `SpeechSetup.route`).
+    func speak(_ text: String, language: String = "en", using setup: SpeechSetup) async throws -> [Float] {
+        var failure: Error?
+        for engine in setup.route(for: language) {
+            do {
+                if let samples = try await synthesize(text, with: engine, language: language, setup: setup),
+                   !samples.isEmpty {
+                    return samples
+                }
+            } catch {
+                failure = error
             }
         }
-        return try await tts.speak(text, voice: voice, speed: speed, clonedVoice: clonedVoice)
+        throw failure ?? WorkerProcess.WorkerError.failed("No voice can speak this")
+    }
+
+    /// nil when `engine` can't speak `language` (or has no voice to speak with).
+    func synthesize(_ text: String, with engine: SpeechEngine, language: String, setup: SpeechSetup) async throws -> [Float]? {
+        switch engine {
+        case .kokoro:
+            return try await tts.speak(text, voice: setup.voice, speed: setup.speed)
+        case .myVoice:
+            guard let clonedVoice = setup.clonedVoice else { return nil }
+            return try await tts.speak(text, voice: setup.voice, speed: setup.speed, clonedVoice: clonedVoice)
+        case .supertonic:
+            guard MultilingualVoices.languages.contains(language) else { return nil }
+            return try await multilingual.speak(text, language: language, voice: setup.languageVoice, speed: setup.speed)
+        case .f5Russian:
+            // Mid-download, the next model says it rather than leaving the reply hanging.
+            guard language == "ru", engine.isInstalled else { return nil }
+            return try await f5Russian.speak(text, voice: setup.languageVoice, speed: setup.speed)
+        case .macOS:
+            guard SystemVoice.hasVoice(for: language) else { return nil }
+            return await SystemVoice.speak(text, language: language, speed: setup.speed)
+        }
     }
 }

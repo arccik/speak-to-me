@@ -24,7 +24,7 @@ enum SelfTest {
             log("LLM loaded: \(lap()) ms")
 
             let question = "What is the tallest mountain in Europe, and how high is it?"
-            let spoken24k = try await speech.speak(question, voice: "am_adam", speed: 1)
+            let spoken24k = try await speech.speak(question, using: SpeechSetup(voice: "am_adam"))
             let spoken16k = Resampler.convert(spoken24k, from: 24_000, to: 16_000)
             log("synthesized test question (\(spoken16k.count / 16) ms of audio): \(lap()) ms")
 
@@ -49,7 +49,7 @@ enum SelfTest {
             let firstSentenceMs = ttft + lap()
             log("LLM  first token \(ttft) ms, first sentence \(firstSentenceMs) ms → \"\(first ?? reply)\"")
 
-            let audio = try await speech.speak(first ?? reply, voice: "af_heart", speed: 1.05)
+            let audio = try await speech.speak(first ?? reply, using: SpeechSetup(speed: 1.05))
             let tts = lap()
             log("TTS  \(tts) ms → \(audio.count / 24) ms of audio")
             let pipeline = stt + firstSentenceMs + tts
@@ -145,6 +145,57 @@ extension SelfTest {
 }
 
 extension SelfTest {
+    /// `SpeakToMe --speechtest`: every model choice for every language group, switched on
+    /// one running set of models, with what Parakeet hears back. With a folder, also
+    /// writes each as a WAV to compare by ear.
+    static func speechModels(writingTo dir: String?) async {
+        let lines: [SpeechSlot: (language: String, text: String)] = [
+            .english: ("en", "The tallest mountain in Europe is Mount Elbrus."),
+            .russian: ("ru", "Самая высокая гора в Европе это Эльбрус."),
+            .other: ("pl", "Najwyższą górą w Europie jest Elbrus."),
+        ]
+        let speech: SpeechModels
+        do { speech = try await SpeechModels.load(voice: "af_heart") { print("  \($0)") } } catch {
+            print("load failed: \(error)"); exit(1)
+        }
+        let myVoice = await VoiceSession.myVoiceFile.path
+        let clonedVoice = FileManager.default.fileExists(atPath: myVoice) ? myVoice : nil
+        var failures = 0
+        for slot in SpeechSlot.allCases {
+            guard let line = lines[slot] else { continue }
+            for engine in slot.engines {
+                let setup = SpeechSetup(engines: [slot: engine], clonedVoice: clonedVoice)
+                do {
+                    try await speech.prepare(engine, using: setup)
+                    let t = Date()
+                    let audio = try await speech.speak(line.text, language: line.language, using: setup)
+                    let ms = Int(Date().timeIntervalSince(t) * 1000)
+                    let heard = try await speech.transcribe(Resampler.convert(audio, from: 24_000, to: 16_000))
+                    print("\(slot.title) → \(engine.name): \(audio.count / 24) ms audio in \(ms) ms  →  \(heard)")
+                    if let dir {
+                        try? WAV.data(audio, sampleRate: 24_000)
+                            .write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(slot.rawValue)-\(engine.rawValue).wav"))
+                    }
+                } catch {
+                    failures += 1
+                    print("\(slot.title) → \(engine.name): FAILED \(error.localizedDescription)")
+                }
+            }
+        }
+        // A model that can't speak the language falls through to the next.
+        let route = SpeechSetup(engines: [.other: .macOS]).route(for: "pl").map(\.name).joined(separator: " → ")
+        print("route for Polish with macOS chosen: \(route)")
+        // The choice survives a restart: written by one read, read back from storage.
+        let saved = SpeechSlot.russian.stored
+        SpeechSlot.russian.stored = .macOS
+        print("stored choice round trip: \(SpeechSlot.russian.stored == .macOS ? "ok" : "FAILED")")
+        SpeechSlot.russian.stored = saved
+        await speech.tts.stop()
+        exit(failures == 0 ? 0 : 1)
+    }
+}
+
+extension SelfTest {
     /// `SpeakToMe --chattest`: drives the real conversation loop with typed messages
     /// (replies muted, so nothing plays) and prints the transcript, tool notes included.
     @MainActor
@@ -209,5 +260,118 @@ extension SelfTest {
         }
         await worker.stop()
         exit(0)
+    }
+}
+
+extension SelfTest {
+    /// `SpeakToMe --f5switchtest`: through the real session, chooses F5-TTS Russian, times it
+    /// while oMLX is busy writing a reply, then chooses another model and checks the memory
+    /// comes back. Nothing plays.
+    @MainActor
+    static func f5Switching() async {
+        func helpers() -> Int {
+            let pgrep = Process(), pipe = Pipe()
+            pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            pgrep.arguments = ["-P", "\(ProcessInfo.processInfo.processIdentifier)", "-f", "f5-worker"]
+            pgrep.standardOutput = pipe
+            try? pgrep.run()
+            pgrep.waitUntilExit()
+            return pipe.fileHandleForReading.readDataToEndOfFile().split(separator: 0x0A).count
+        }
+        let session = VoiceSession.shared
+        await session.boot()
+        guard let speech = session.speechForTest else { print("boot failed: \(session.phase)"); exit(1) }
+        let chosenBefore = session.speechEngines[.russian] ?? .supertonic
+
+        session.setEngine(.f5Russian, for: .russian)
+        var t = Date()
+        while true {
+            switch session.state(of: .f5Russian) {
+            case .ready: break
+            case .failed(let message): print("FAILED: \(message)"); exit(1)
+            default:
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+            break
+        }
+        print("chosen, ready in \(Int(Date().timeIntervalSince(t) * 1000)) ms, helpers running: \(helpers())")
+
+        let setup = SpeechSetup(engines: [.russian: .f5Russian])
+        let lines = [
+            "Привет, рада тебя слышать.",
+            "Москва является столицей России, и в ней живёт больше двенадцати миллионов человек.",
+            "В 2024 году я прошла 42 километра.",
+        ]
+        func say(_ label: String) async {
+            for line in lines {
+                t = Date()
+                let audio = (try? await speech.speak(line, language: "ru", using: setup)) ?? []
+                let ms = Int(Date().timeIntervalSince(t) * 1000)
+                let heard = (try? await speech.transcribe(Resampler.convert(audio, from: 24_000, to: 16_000))) ?? "?"
+                print("\(label): \(audio.count / 24) ms audio in \(ms) ms  →  \(heard)")
+            }
+        }
+        await say("idle")
+        let client = OMLXClient.fromSettings(), model = session.modelID
+        let busy = Task {
+            let prompt = "Расскажи подробно историю Москвы, не меньше трёхсот слов."
+            for try await _ in client.streamChat(model: model, messages: [.init(role: "user", content: prompt)]) {}
+        }
+        await say("while oMLX writes")
+        busy.cancel()
+
+        // A crash costs a reload, not the conversation.
+        let pkill = Process()
+        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        pkill.arguments = ["-9", "-P", "\(ProcessInfo.processInfo.processIdentifier)", "-f", "f5-worker"]
+        try? pkill.run()
+        pkill.waitUntilExit()
+        try? await Task.sleep(for: .milliseconds(300))
+        print("killed, helpers running: \(helpers())")
+        t = Date()
+        let recovered = (try? await speech.speak(lines[0], language: "ru", using: setup)) ?? []
+        print("after the crash: \(recovered.count / 24) ms audio in \(Int(Date().timeIntervalSince(t) * 1000)) ms, helpers running: \(helpers())")
+
+        session.setEngine(chosenBefore == .f5Russian ? .supertonic : chosenBefore, for: .russian)
+        try? await Task.sleep(for: .seconds(1))
+        print("switched away, helpers running: \(helpers())")
+        session.setEngine(chosenBefore, for: .russian)
+        exit(0)
+    }
+}
+
+extension SelfTest {
+    /// `SpeakToMe --f5test <modelDir> <referenceWav> <referenceText> <outDir>`: the F5-TTS port
+    /// alone, with a fixed seed so its output can be compared to another implementation's.
+    static func f5(modelDir: String, reference: String, referenceText: String, out: String) {
+        do {
+            let folder = URL(fileURLWithPath: modelDir)
+            var t = Date()
+            let model = try F5TTS(
+                checkpoint: folder.appendingPathComponent("model_v1.safetensors"),
+                vocabulary: folder.appendingPathComponent("vocab.txt"),
+                vocoder: folder.appendingPathComponent("vocos.safetensors"))
+            let samples = WAV.samples(try Data(contentsOf: URL(fileURLWithPath: reference)))
+            let voice = model.reference(samples: samples, text: referenceText)
+            print("loaded in \(Int(Date().timeIntervalSince(t) * 1000)) ms, reference \(voice.mel.shape)")
+            let lines = [
+                ("plain", "Москва является столицей России, и в ней живёт больше двенадцати миллионов человек."),
+                ("short", "Да, конечно."),
+                ("numbers", "В 2024 году гора высотой 5642 метра."),
+            ]
+            _ = try model.speak("Да.", reference: voice, seed: 42)
+            for (name, text) in lines {
+                t = Date()
+                let audio = try model.speak(text, reference: voice, seed: 42)
+                print("\(name): \(audio.count / 24) ms audio in \(Int(Date().timeIntervalSince(t) * 1000)) ms")
+                try WAV.data(audio, sampleRate: F5TTS.sampleRate)
+                    .write(to: URL(fileURLWithPath: out).appendingPathComponent("\(name).wav"))
+            }
+            exit(0)
+        } catch {
+            print("F5 TEST FAILED: \(error.localizedDescription)")
+            exit(1)
+        }
     }
 }
