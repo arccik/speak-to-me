@@ -105,19 +105,23 @@ struct RussianStress {
         }
     }
 
-    func marked(_ text: String) -> String {
+    /// `overrides` maps lowercase words to how you want them marked, ahead of the dictionary.
+    func marked(_ text: String, overrides: [String: String] = [:]) -> String {
         var result = ""
         var rest = Substring(text.precomposedStringWithCanonicalMapping)
         while let match = rest.firstMatch(of: #/[а-яёА-ЯЁ]+(?:-[а-яёА-ЯЁ]+)*/#) {
             result += rest[..<match.range.lowerBound]
-            result += marked(word: String(match.output))
+            result += marked(word: String(match.output), overrides: overrides)
             rest = rest[match.range.upperBound...]
         }
         return result + rest
     }
 
-    private func marked(word: String) -> String {
+    private func marked(word: String, overrides: [String: String]) -> String {
         var characters = Array(word)
+        if let form = overrides[word.lowercased()] {
+            return characters.first?.isUppercase == true ? form.prefix(1).uppercased() + form.dropFirst() : form
+        }
         let vowels = characters.filter { "аеёиоуыэюяАЕЁИОУЫЭЮЯ".contains($0) }.count
         var lower = word.lowercased()
         // Restore ё ("еще" to "ещё"), keeping the original's capitals.

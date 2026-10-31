@@ -112,6 +112,10 @@ struct SpeechSetup: Sendable {
     var f5Steps = 8
     /// Mark F5-TTS's text with where words are stressed (RUAccent's dictionary).
     var f5MarksStress = true
+    /// The voice F5-TTS imitates, instead of a clip of `languageVoice`.
+    var f5Voice: F5ClonedVoice?
+    /// Lowercase words and how they should be stressed ("замок": "зам+ок").
+    var f5Pronunciations: [String: String] = [:]
 
     /// The chosen model for `language`, then what to try if it can't.
     func route(for language: String) -> [SpeechEngine] {

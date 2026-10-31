@@ -109,7 +109,8 @@ final class SpeechModels {
             // Mid-download, the next model says it rather than leaving the reply hanging.
             guard language == "ru", engine.isInstalled else { return nil }
             return try await f5Russian.speak(
-                text, voice: setup.languageVoice, speed: setup.speed, steps: setup.f5Steps, marksStress: setup.f5MarksStress)
+                text, voice: setup.languageVoice, cloned: setup.f5Voice, speed: setup.speed, steps: setup.f5Steps,
+                marksStress: setup.f5MarksStress, pronunciations: setup.f5Pronunciations)
         case .macOS:
             guard SystemVoice.hasVoice(for: language) else { return nil }
             return await SystemVoice.speak(text, language: language, speed: setup.speed)

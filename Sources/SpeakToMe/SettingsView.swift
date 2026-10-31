@@ -365,14 +365,6 @@ private struct VoicePane: View {
                         }
                     }
                 }
-                if session.speechEngines[.russian] == .f5Russian {
-                    Picker("F5-TTS quality", selection: $session.f5Steps) {
-                        Text("Fastest").tag(8)
-                        Text("Balanced").tag(12)
-                        Text("Best").tag(16)
-                    }
-                    Toggle("Mark word stress for F5-TTS (RUAccent dictionary)", isOn: $session.f5MarksStress)
-                }
                 LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
                               low: "Slower", high: "Faster") { String(format: "%.2f×", Double($0)) }
             }
@@ -382,8 +374,106 @@ private struct VoicePane: View {
             } header: {
                 Text("Language")
             }
+            if session.speechEngines[.russian] == .f5Russian { F5Section() }
             MyVoiceSection()
         }
+    }
+}
+
+/// F5-TTS Russian: whose voice it imitates, its quality, and how it stresses words.
+private struct F5Section: View {
+    @Environment(VoiceSession.self) private var session
+    @State private var newPronunciation = ""
+
+    var body: some View {
+        @Bindable var session = session
+        Section {
+            Picker("Voice", selection: $session.f5VoiceID) {
+                Text("Voice for other languages (above)").tag("")
+                ForEach(session.f5Voices) { Text($0.name).tag($0.id) }
+            }
+            if let voice = session.selectedF5Voice {
+                TextField("Name", text: Binding(
+                    get: { voice.name }, set: { session.updateF5Voice(voice.id, name: $0) }))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("What's said in the clip")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    TextField("What's said in the clip", text: Binding(
+                        get: { voice.transcript }, set: { session.updateF5Voice(voice.id, transcript: $0) }),
+                        axis: .vertical)
+                        .labelsHidden()
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("To record, read this aloud")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(VoiceSession.f5VoiceScript)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            HStack {
+                Button {
+                    Task { await session.recordF5Voice() }
+                } label: {
+                    Label("Record (8 s)", systemImage: "record.circle")
+                }
+                Button("Use an Audio File…") {
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.audio]
+                    if panel.runModal() == .OK, let url = panel.url {
+                        Task { await session.importF5Voice(from: url) }
+                    }
+                }
+                Spacer()
+                if let voice = session.selectedF5Voice {
+                    Button("Delete", role: .destructive) { session.deleteF5Voice(voice.id) }
+                }
+            }
+            .disabled(session.f5VoiceBusy)
+            if let status = session.f5VoiceStatus {
+                HStack(spacing: 6) {
+                    if session.f5VoiceBusy { ProgressView().controlSize(.small) }
+                    Text(status).font(.callout)
+                }
+            }
+            Picker("Quality", selection: $session.f5Steps) {
+                Text("Fastest").tag(8)
+                Text("Balanced").tag(12)
+                Text("Best").tag(16)
+            }
+            Toggle("Mark word stress (RUAccent dictionary)", isOn: $session.f5MarksStress)
+            if session.f5MarksStress {
+                LabeledContent("Fix a word") {
+                    HStack {
+                        TextField("зам+ок", text: $newPronunciation)
+                            .labelsHidden()
+                            .frame(width: 140)
+                            .onSubmit(addPronunciation)
+                        Button("Add", action: addPronunciation)
+                            .disabled(!newPronunciation.contains("+"))
+                    }
+                }
+                ForEach(session.f5Pronunciations.keys.sorted(), id: \.self) { word in
+                    LabeledContent(session.f5Pronunciations[word] ?? word) {
+                        Button("Remove") { session.removePronunciation(word) }
+                    }
+                }
+            }
+        } header: {
+            Text("F5-TTS Russian")
+        } footer: {
+            Footer("A clear clip of one person works best, up to 8 seconds is used, and the words must match what's said. Only clone a voice you have permission to use. To fix a word, put + before its stressed vowel. Everything stays on this Mac.")
+        }
+    }
+
+    private func addPronunciation() {
+        session.addPronunciation(newPronunciation)
+        newPronunciation = ""
     }
 }
 

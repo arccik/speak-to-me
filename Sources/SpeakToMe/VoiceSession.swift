@@ -335,7 +335,129 @@ final class VoiceSession {
     private var speechSetup: SpeechSetup {
         SpeechSetup(
             engines: speechEngines, voice: voice, languageVoice: languageVoice, speed: Float(speed),
-            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil, f5Steps: f5Steps, f5MarksStress: f5MarksStress)
+            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil, f5Steps: f5Steps, f5MarksStress: f5MarksStress,
+            f5Voice: selectedF5Voice, f5Pronunciations: f5Pronunciations)
+    }
+
+    // MARK: - F5-TTS voices
+
+    /// Voices cloned for F5-TTS Russian.
+    private(set) var f5Voices = F5VoiceLibrary.load()
+    /// The one in use; empty for a clip of the Supertonic-3 voice.
+    var f5VoiceID = StoredSetting.value("f5VoiceID", default: "") { didSet { StoredSetting.store(f5VoiceID, "f5VoiceID") } }
+    var f5VoiceStatus: String?
+    private(set) var f5VoiceBusy = false
+    /// How words should be stressed, overruling the dictionary ("замок": "зам+ок").
+    private(set) var f5Pronunciations = StoredSetting.value("f5Pronunciations", default: [String: String]()) {
+        didSet { StoredSetting.store(f5Pronunciations, "f5Pronunciations") }
+    }
+
+    var selectedF5Voice: F5ClonedVoice? { f5Voices.first { $0.id == f5VoiceID } }
+
+    static let f5VoiceScript = "Привет! Я записываю свой голос, чтобы помощник мог говорить как я. "
+        + "Сегодня хороший день, и я никуда не спешу."
+
+    /// Records 8 s from the mic and adds it as a voice.
+    func recordF5Voice() async {
+        guard !f5VoiceBusy else { return }
+        if micOn { stop() }
+        guard await AVCaptureDevice.requestAccess(for: .audio) else {
+            f5VoiceStatus = Self.deniedNotice
+            return
+        }
+        f5VoiceBusy = true
+        defer { f5VoiceBusy = false }
+        let recording = FileManager.default.temporaryDirectory.appendingPathComponent("f5-voice-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: recording) }
+        do {
+            // The recorder hears almost nothing while voice processing is still winding down.
+            if audio.isRunning {
+                audio.stop()
+                f5VoiceStatus = "Getting the microphone ready…"
+                try? await Task.sleep(for: .seconds(2))
+            }
+            let recorder = try AVAudioRecorder(url: recording, settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 24_000, AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false,
+            ])
+            SoundCues.play(.start)
+            try? await Task.sleep(for: .milliseconds(350)) // don't record the chime
+            recorder.record(forDuration: 8)
+            for remaining in stride(from: 8, to: 0, by: -1) {
+                f5VoiceStatus = "Recording… \(remaining) s left. Read the text above aloud."
+                try? await Task.sleep(for: .seconds(1))
+            }
+            while recorder.isRecording { try? await Task.sleep(for: .milliseconds(100)) }
+            SoundCues.play(.stop)
+        } catch {
+            f5VoiceStatus = "Couldn't record: \(error.localizedDescription)"
+            return
+        }
+        await addF5Voice(from: recording, name: "Recording \(f5Voices.count + 1)")
+    }
+
+    func importF5Voice(from url: URL) async {
+        guard !f5VoiceBusy else { return }
+        f5VoiceBusy = true
+        defer { f5VoiceBusy = false }
+        await addF5Voice(from: url, name: url.deletingPathExtension().lastPathComponent)
+    }
+
+    /// Prepares the clip, writes down what it says with Parakeet, and starts using it.
+    private func addF5Voice(from file: URL, name: String) async {
+        guard let speech else { f5VoiceStatus = "Still loading, try again in a moment."; return }
+        f5VoiceStatus = "Listening to the clip…"
+        do {
+            let clip = try await Task.detached { try F5VoiceLibrary.clip(from: file) }.value
+            let transcript = try await speech.transcribe(Resampler.convert(clip, from: Double(F5TTS.sampleRate), to: 16_000))
+            guard transcript.contains(where: \.isLetter) else {
+                f5VoiceStatus = "No speech found in that clip."
+                return
+            }
+            let voice = F5ClonedVoice(id: UUID().uuidString, name: name, transcript: transcript)
+            try FileManager.default.createDirectory(at: F5VoiceLibrary.folder, withIntermediateDirectories: true)
+            try WAV.data(clip, sampleRate: F5TTS.sampleRate).write(to: voice.clip, options: .atomic)
+            f5Voices.append(voice)
+            F5VoiceLibrary.save(f5Voices)
+            f5VoiceID = voice.id
+            f5VoiceStatus = "Added. Check the words below match what's said."
+        } catch {
+            f5VoiceStatus = "Couldn't add that voice: \(error.localizedDescription)"
+        }
+    }
+
+    func updateF5Voice(_ id: String, name: String? = nil, transcript: String? = nil) {
+        guard let index = f5Voices.firstIndex(where: { $0.id == id }) else { return }
+        if let name { f5Voices[index].name = name }
+        if let transcript { f5Voices[index].transcript = transcript }
+        F5VoiceLibrary.save(f5Voices)
+    }
+
+    func deleteF5Voice(_ id: String) {
+        guard let voice = f5Voices.first(where: { $0.id == id }) else { return }
+        try? FileManager.default.removeItem(at: voice.clip)
+        f5Voices.removeAll { $0.id == id }
+        F5VoiceLibrary.save(f5Voices)
+        if f5VoiceID == id { f5VoiceID = "" }
+        f5VoiceStatus = nil
+    }
+
+    /// `form` marks the stressed vowel, as in "зам+ок".
+    func addPronunciation(_ form: String) {
+        let form = form.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let word = form.replacingOccurrences(of: "+", with: "")
+        guard !word.isEmpty, form.contains("+") else { return }
+        f5Pronunciations[word] = form
+    }
+
+    func removePronunciation(_ word: String) {
+        f5Pronunciations[word] = nil
+    }
+
+    /// For Snapshots: a voice to show without storing anything.
+    func showF5VoiceForSnapshot(_ voice: F5ClonedVoice) {
+        f5Voices = [voice]
+        f5VoiceStatus = "Added. Check the words below match what's said."
     }
 
     // MARK: - Your own voice

@@ -30,6 +30,11 @@ enum Main {
             Task.detached { await SelfTest.languages(writingTo: dir) }
             dispatchMain()
         }
+        if let flag = args.firstIndex(of: "--f5clonetest"), args.indices.contains(flag + 2) {
+            let (sample, dir) = (args[flag + 1], args[flag + 2])
+            Task.detached { await SelfTest.f5Clone(sample: sample, to: dir) }
+            dispatchMain()
+        }
         if let flag = args.firstIndex(of: "--replytest"), args.indices.contains(flag + 1) {
             let engine = args.indices.contains(flag + 2) ? SpeechEngine(rawValue: args[flag + 2]) ?? .f5Russian : .f5Russian
             let model = args[flag + 1]

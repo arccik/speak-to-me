@@ -66,17 +66,22 @@ actor F5RussianVoice {
             try await Task.detached { try RussianStress.buildIndex(folder: folder) }.value
         }
         stress = RussianStress(folder: folder)
-        _ = try await speak("Да.", voice: voice, speed: 1, steps: 8, marksStress: false)
+        _ = try await speak("Да.", voice: voice, cloned: nil, speed: 1, steps: 8, marksStress: false)
     }
 
-    /// 24 kHz samples. `steps` trades speed for quality.
-    func speak(_ text: String, voice: String, speed: Float, steps: Int, marksStress: Bool) async throws -> [Float] {
-        let reference = try await referenceClip(voice: voice)
+    /// 24 kHz samples, imitating `cloned` or else a clip of the Supertonic-3 `voice`.
+    /// `steps` trades speed for quality. `pronunciations` overrules the stress dictionary.
+    func speak(
+        _ text: String, voice: String, cloned: F5ClonedVoice?, speed: Float, steps: Int, marksStress: Bool,
+        pronunciations: [String: String] = [:]
+    ) async throws -> [Float] {
+        let reference: URL
+        if let cloned { reference = cloned.clip } else { reference = try await referenceClip(voice: voice) }
         var spoken = Self.spellingOutNumbers(text)
-        var referenceText = Self.referenceText
+        var referenceText = cloned.map { Self.spellingOutNumbers($0.transcript) } ?? Self.referenceText
         if marksStress, let stress {
-            spoken = stress.marked(spoken)
-            referenceText = Self.markedReferenceText
+            spoken = stress.marked(spoken, overrides: pronunciations)
+            referenceText = cloned == nil ? Self.markedReferenceText : stress.marked(referenceText)
         }
         return try await liveWorker().request(
             spoken,
@@ -261,7 +266,8 @@ enum F5Worker {
             do {
                 let speed = (json["speed"] as? NSNumber)?.floatValue ?? 1
                 let steps = json["steps"] as? Int ?? 8
-                let samples = try model.speak(text, reference: reference, speed: speed, steps: steps)
+                // The same seed each time keeps the voice steadier from sentence to sentence.
+                let samples = try model.speak(text, reference: reference, speed: speed, steps: steps, seed: 42)
                 send(["id": id, "pcm": WorkerProcess.pcmBase64(samples)])
             } catch {
                 send(["id": id, "error": error.localizedDescription])

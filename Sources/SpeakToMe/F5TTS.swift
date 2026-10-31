@@ -45,6 +45,20 @@ final class F5TTS {
         vocoder = try Vocos(Weights(try loadArrays(url: vocoderFile), prefix: ""))
     }
 
+    /// The same loudness from sentence to sentence.
+    private static func levelled(_ samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        var energy: Float = 0, peak: Float = 0
+        for sample in samples {
+            energy += sample * sample
+            peak = max(peak, abs(sample))
+        }
+        let rms = (energy / Float(samples.count)).squareRoot()
+        guard rms > 0 else { return samples }
+        let gain = min(0.1 / rms, 0.98 / peak)
+        return samples.map { $0 * gain }
+    }
+
     /// A reference clip of the voice to speak in, already turned into mel frames.
     struct Reference {
         let mel: MLXArray
@@ -111,7 +125,7 @@ final class F5TTS {
         }
 
         let mel = which(keep, cond, y)
-        return Array(vocoder.decode(mel).dropFirst(reference.samples))
+        return Self.levelled(Array(vocoder.decode(mel).dropFirst(reference.samples)))
     }
 }
 

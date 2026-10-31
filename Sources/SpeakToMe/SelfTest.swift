@@ -145,6 +145,49 @@ extension SelfTest {
 }
 
 extension SelfTest {
+    /// `SpeakToMe --f5clonetest <sample> <dir>`: an audio file through the same steps as adding
+    /// a voice in Settings, then F5-TTS speaking in it and in the built-in voice, with what
+    /// Parakeet hears from each. Writes WAVs to <dir> and stores nothing in the library.
+    static func f5Clone(sample: String, to dir: String) async {
+        do {
+            let speech = try await SpeechModels.load(voice: "af_heart") { _ in }
+            let plain = SpeechSetup()
+            try await speech.prepare(.f5Russian, using: plain)
+            let clip = try F5VoiceLibrary.clip(from: URL(fileURLWithPath: sample))
+            let transcript = try await speech.transcribe(Resampler.convert(clip, from: Double(F5TTS.sampleRate), to: 16_000))
+            print("clip \(clip.count / 24) ms: \(transcript)")
+            let folder = URL(fileURLWithPath: dir)
+            let voice = F5ClonedVoice(id: "selftest-\(UUID().uuidString)", name: "test", transcript: transcript)
+            try FileManager.default.createDirectory(at: F5VoiceLibrary.folder, withIntermediateDirectories: true)
+            try WAV.data(clip, sampleRate: F5TTS.sampleRate).write(to: voice.clip)
+            try WAV.data(clip, sampleRate: F5TTS.sampleRate).write(to: folder.appendingPathComponent("clip.wav"))
+            let text = "Москва является столицей России, и на двери висит большой замок."
+            for (name, setup) in [
+                ("cloned", SpeechSetup(engines: [.russian: .f5Russian], f5Voice: voice, f5Pronunciations: ["замок": "зам+ок"])),
+                ("builtin", SpeechSetup(engines: [.russian: .f5Russian])),
+            ] {
+                let t = Date()
+                let audio = try await speech.speak(text, language: "ru", using: setup)
+                let ms = Int(Date().timeIntervalSince(t) * 1000)
+                let heard = try await speech.transcribe(Resampler.convert(audio, from: 24_000, to: 16_000))
+                print("\(name): \(audio.count / 24) ms audio in \(ms) ms  →  \(heard)")
+                try WAV.data(audio, sampleRate: 24_000).write(to: folder.appendingPathComponent("\(name).wav"))
+            }
+            if let stress = RussianStress(folder: F5RussianVoice.folder) {
+                print(stress.marked(text, overrides: ["замок": "зам+ок"]))
+            }
+            try? FileManager.default.removeItem(at: voice.clip)
+            await speech.f5Russian.stop()
+            await speech.tts.stop()
+            exit(0)
+        } catch {
+            print("F5 CLONE TEST FAILED: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+}
+
+extension SelfTest {
     /// `SpeakToMe --replytest <model> [engine]`: where the wait goes in a Russian spoken reply,
     /// with the language model and the voice running at the same time, as they do in a real
     /// conversation. Prints when each piece would be ready and any silence between them.

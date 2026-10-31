@@ -27,7 +27,7 @@ Measured on an M5 with `gemma-4-26b-a4b-it-4bit`: about 1.2 s from the end of yo
 
 ### F5-TTS Russian
 
-Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) (CC-BY-NC-4.0, so non-commercial) has no Core ML build, so it runs on MLX, on the GPU, in its own helper process (`--f5-worker`). Choosing it downloads about 1.4 GB. It imitates a short clip made with the chosen Supertonic-3 voice, numbers are spelled out first because it reads digits badly, and word stress is marked from [RUAccent](https://github.com/Den4ikAI/ruaccent)'s dictionary (MIT; its neural models aren't used, so homographs and unknown words stay unmarked). The helper (about 3 GB at its peak) exits as soon as another model is chosen. If it's still downloading or it fails, the next model says the sentence.
+Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) (CC-BY-NC-4.0, so non-commercial) has no Core ML build, so it runs on MLX, on the GPU, in its own helper process (`--f5-worker`). Choosing it downloads about 1.4 GB. It imitates a short clip made with the chosen Supertonic-3 voice, numbers are spelled out first because it reads digits badly, and word stress is marked from [RUAccent](https://github.com/Den4ikAI/ruaccent)'s dictionary (MIT; its neural models aren't used, so homographs and unknown words stay unmarked). You can clone a voice for it in Settings by recording or picking a clip (`F5VoiceLibrary.swift`; Parakeet writes the transcript, which you can correct), and fix individual words by marking their stress. The helper (about 3 GB at its peak) exits as soon as another model is chosen. If it's still downloading or it fails, the next model says the sentence.
 
 `swift build` can't compile MLX's Metal shaders, so `scripts/build-mlx-shaders.sh` does (once, about 15 minutes, 193 MB), and `build-app.sh` puts them next to the executable. That needs Xcode's Metal Toolchain and F5-TTS needs macOS 26.2 or later:
 
@@ -98,6 +98,7 @@ Drives the real conversation loop with typed messages (time, web search, a joke,
 | `--langtest` | Language detection and macOS voice per language |
 | `--speechtest [dir]` | Every speech model choice per language group on one running instance, with what Parakeet hears back; writes WAVs to `dir` |
 | `--f5test <modelDir> <ref.wav> <refText> <dir>` | F5-TTS alone with a fixed seed, to compare with another implementation; writes WAVs to `dir` |
+| `--f5clonetest <sample> <dir>` | An audio file through the same steps as adding a voice, then F5-TTS speaking in it and in the built-in voice; writes WAVs to `dir` |
 | `--replytest <model> [engine]` | Where the wait goes in a Russian spoken reply, with the language model and voice running together |
 | `--f5switchtest` | Through the real session: choose F5-TTS Russian, time it idle and while oMLX writes, kill its helper, switch away and check the helper is gone |
 | `--clonetest <dir>` | Clones a voice from a Kokoro-made sample; writes `sample.wav` and `cloned.wav` |
