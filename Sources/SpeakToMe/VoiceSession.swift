@@ -159,7 +159,8 @@ final class VoiceSession {
         }
     }
 
-    private let client = OMLXClient.fromSettings()
+    private var client = OMLXClient.fromSettings()
+    private var reconnectTask: Task<Void, Never>?
     var serverAddress: String { client.baseURL.absoluteString }
     private let audio = AudioIO()
     var levels: AudioLevels { audio.levels }
@@ -183,6 +184,14 @@ final class VoiceSession {
     func boot() async {
         savedConversations = store.list()
         if let latest = savedConversations.first { openConversation(latest.id) }
+        await connect()
+    }
+
+    /// Connects to oMLX and loads the speech models. Also what Try Again runs after a failure.
+    func connect() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        client = OMLXClient.fromSettings() // the port or key may have changed since the last try
         do {
             phase = .loading("Connecting to oMLX…")
             models = try await client.chatModels()
@@ -190,7 +199,8 @@ final class VoiceSession {
                 modelID = Self.pickDefault(models)?.id ?? ""
             }
         } catch {
-            phase = .failed("Can't reach oMLX at \(client.baseURL.absoluteString). Is the oMLX app running?\n\(error.localizedDescription)")
+            phase = .failed("Can't reach oMLX at \(client.baseURL.absoluteString). Is the oMLX app running? Speak to Me will connect as soon as it is.\n\(error.localizedDescription)")
+            waitForServer()
             return
         }
         do {
@@ -204,6 +214,19 @@ final class VoiceSession {
             phase = .ready
         } catch {
             phase = .failed("Couldn't load the speech models: \(error.localizedDescription)")
+        }
+    }
+
+    /// Checks quietly for oMLX coming up, so the error stays on screen until it does.
+    private func waitForServer() {
+        reconnectTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard (try? await OMLXClient.fromSettings().chatModels()) != nil, !Task.isCancelled else { continue }
+                self?.reconnectTask = nil // connect() would otherwise cancel the task it's running in
+                await self?.connect()
+                return
+            }
         }
     }
 

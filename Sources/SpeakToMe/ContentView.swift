@@ -304,6 +304,19 @@ private struct StatusLabel: View {
                     .padding(.horizontal, 32)
                     .transition(.opacity)
             }
+
+            if case .failed = session.phase {
+                Button { Task { await session.connect() } } label: {
+                    Text("Try Again")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.1), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
