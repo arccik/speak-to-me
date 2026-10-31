@@ -91,6 +91,10 @@ final class VoiceSession {
     /// Talk over replies without headphones. macOS turns down other apps' audio
     /// (YouTube, music) while it's active, so it's only on while a reply is under way.
     var echoCancellation = StoredSetting.value("echoCancellation", default: true) { didSet { StoredSetting.store(echoCancellation, "echoCancellation") } }
+    /// F5-TTS Russian: 8 is fast and clear, more is slower and a little cleaner.
+    var f5Steps = StoredSetting.value("f5Steps", default: 8) { didSet { StoredSetting.store(f5Steps, "f5Steps") } }
+    /// F5-TTS Russian: mark word stress first, as it was trained to read.
+    var f5MarksStress = StoredSetting.value("f5MarksStress", default: true) { didSet { StoredSetting.store(f5MarksStress, "f5MarksStress") } }
     var myVoiceStatus: String?
     private(set) var myVoiceBusy = false
     /// The language of the conversation so far; sticks when a message is too short to tell.
@@ -209,6 +213,8 @@ final class VoiceSession {
             }
             for engine in enginesToPrepare { prepareEngine(engine) }
             enginesToPrepare = []
+            // It's slow to load, so it's ready before the first reply rather than during it.
+            if speechEngines[.russian] == .f5Russian, SpeechEngine.f5Russian.isInstalled { prepareEngine(.f5Russian) }
             phase = .loading("Loading \(modelID) in oMLX…")
             await warm.value
             phase = .ready
@@ -329,7 +335,7 @@ final class VoiceSession {
     private var speechSetup: SpeechSetup {
         SpeechSetup(
             engines: speechEngines, voice: voice, languageVoice: languageVoice, speed: Float(speed),
-            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil)
+            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil, f5Steps: f5Steps, f5MarksStress: f5MarksStress)
     }
 
     // MARK: - Your own voice

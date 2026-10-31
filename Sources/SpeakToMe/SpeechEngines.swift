@@ -108,6 +108,10 @@ struct SpeechSetup: Sendable {
     var speed: Float = 1
     /// The voice file PocketTTS speaks with, when one has been recorded.
     var clonedVoice: String?
+    /// F5-TTS's solver steps: more is slower and cleaner.
+    var f5Steps = 8
+    /// Mark F5-TTS's text with where words are stressed (RUAccent's dictionary).
+    var f5MarksStress = true
 
     /// The chosen model for `language`, then what to try if it can't.
     func route(for language: String) -> [SpeechEngine] {

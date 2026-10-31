@@ -27,7 +27,7 @@ Measured on an M5 with `gemma-4-26b-a4b-it-4bit`: about 1.2 s from the end of yo
 
 ### F5-TTS Russian
 
-Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) (CC-BY-NC-4.0, so non-commercial) has no Core ML build, so it runs on MLX, on the GPU, in its own helper process (`--f5-worker`). Choosing it downloads about 1.4 GB. It imitates a short clip made with the chosen Supertonic-3 voice, numbers are spelled out first because it reads digits badly, and the helper (about 3.4 GB at its peak) exits as soon as another model is chosen. If it's still downloading or it fails, the next model says the sentence.
+Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) (CC-BY-NC-4.0, so non-commercial) has no Core ML build, so it runs on MLX, on the GPU, in its own helper process (`--f5-worker`). Choosing it downloads about 1.4 GB. It imitates a short clip made with the chosen Supertonic-3 voice, numbers are spelled out first because it reads digits badly, and word stress is marked from [RUAccent](https://github.com/Den4ikAI/ruaccent)'s dictionary (MIT; its neural models aren't used, so homographs and unknown words stay unmarked). The helper (about 3 GB at its peak) exits as soon as another model is chosen. If it's still downloading or it fails, the next model says the sentence.
 
 `swift build` can't compile MLX's Metal shaders, so `scripts/build-mlx-shaders.sh` does (once, about 15 minutes, 193 MB), and `build-app.sh` puts them next to the executable. That needs Xcode's Metal Toolchain and F5-TTS needs macOS 26.2 or later:
 
@@ -110,6 +110,7 @@ Drives the real conversation loop with typed messages (time, web search, a joke,
 - `SpeechEngines.swift`: the speech models you can choose, per language group, and their fallbacks
 - `SpeechModels.swift`: loads VAD and Parakeet; speaks with the chosen model
 - `F5TTS.swift`: F5-TTS and its Vocos vocoder, ported to MLX Swift (inference only)
+- `RussianStress.swift`: stress marks from RUAccent's dictionary, searched on disk
 - `F5Voice.swift`: F5-TTS Russian's download, reference clip and helper process
 - `TTSWorker.swift`: the crash-isolated voice helper process (Kokoro + PocketTTS) with a hot standby
 - `OMLXClient.swift`: model list, streaming chat with images and tool calls, model pinning

@@ -344,7 +344,7 @@ private struct VoicePane: View {
             } header: {
                 Text("Speech models")
             } footer: {
-                Footer("Applies from the next reply. If a model can't speak a sentence, the next available one does. Supertonic-3 covers 31 languages; macOS voices can be improved in System Settings → Accessibility → Spoken Content. F5-TTS Russian sounds the most natural but takes a few seconds per sentence and about 3 GB of memory while it's chosen; for non-commercial use.")
+                Footer("Applies from the next reply. If a model can't speak a sentence, the next available one does. Supertonic-3 covers 31 languages; macOS voices can be improved in System Settings → Accessibility → Spoken Content. F5-TTS Russian sounds the most natural but takes a second or two per sentence and about 3 GB of memory while it's chosen; for non-commercial use.")
             }
             Section {
                 if session.speechEngines[.english] == .kokoro {
@@ -364,6 +364,14 @@ private struct VoicePane: View {
                             Text("\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())").tag(id)
                         }
                     }
+                }
+                if session.speechEngines[.russian] == .f5Russian {
+                    Picker("F5-TTS quality", selection: $session.f5Steps) {
+                        Text("Fastest").tag(8)
+                        Text("Balanced").tag(12)
+                        Text("Best").tag(16)
+                    }
+                    Toggle("Mark word stress for F5-TTS (RUAccent dictionary)", isOn: $session.f5MarksStress)
                 }
                 LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
                               low: "Slower", high: "Faster") { String(format: "%.2f×", Double($0)) }

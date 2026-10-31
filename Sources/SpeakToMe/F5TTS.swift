@@ -61,8 +61,8 @@ final class F5TTS {
         return Reference(mel: mel, samples: samples.count, text: text)
     }
 
-    /// `steps` trades speed for quality: 16 is the fewest that stays clean.
-    func speak(_ text: String, reference: Reference, speed: Float = 1, steps: Int = 16, seed: UInt64? = nil) throws -> [Float] {
+    /// `steps` trades speed for quality: below 8, words start to go.
+    func speak(_ text: String, reference: Reference, speed: Float = 1, steps: Int = 8, seed: UInt64? = nil) throws -> [Float] {
         let characters = (reference.text + " " + text).precomposedStringWithCanonicalMapping.unicodeScalars
         let tokens = MLXArray(characters.map { vocabulary[$0] ?? 0 })
         let referenceFrames = reference.mel.dim(1)

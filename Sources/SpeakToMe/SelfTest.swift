@@ -298,6 +298,9 @@ extension SelfTest {
         print("chosen, ready in \(Int(Date().timeIntervalSince(t) * 1000)) ms, helpers running: \(helpers())")
 
         let setup = SpeechSetup(engines: [.russian: .f5Russian])
+        if let stress = RussianStress(folder: F5RussianVoice.folder) {
+            print(stress.marked("Москва, ещё и всё ЕЩЕ: на двери висит замок, город Ростов-на-Дону и 1 слово-хамелеон."))
+        }
         let lines = [
             "Привет, рада тебя слышать.",
             "Москва является столицей России, и в ней живёт больше двенадцати миллионов человек.",
@@ -358,7 +361,9 @@ extension SelfTest {
             let lines = [
                 ("plain", "Москва является столицей России, и в ней живёт больше двенадцати миллионов человек."),
                 ("short", "Да, конечно."),
-                ("numbers", "В 2024 году гора высотой 5642 метра."),
+                ("mid", "Самая известная достопримечательность города, это Красная площадь."),
+                ("hard", "Вчера мы с друзьями ездили за город, жарили шашлыки и слушали музыку."),
+                ("tech", "Искусственный интеллект быстро развивается, но ему всё ещё нужны хорошие данные."),
             ]
             _ = try model.speak("Да.", reference: voice, seed: 42)
             for (name, text) in lines {
@@ -367,6 +372,13 @@ extension SelfTest {
                 print("\(name): \(audio.count / 24) ms audio in \(Int(Date().timeIntervalSince(t) * 1000)) ms")
                 try WAV.data(audio, sampleRate: F5TTS.sampleRate)
                     .write(to: URL(fileURLWithPath: out).appendingPathComponent("\(name).wav"))
+                if let stress = RussianStress(folder: folder) {
+                    let marked = model.reference(samples: samples, text: F5RussianVoice.markedReferenceText)
+                    let spoken = stress.marked(text)
+                    print("  \(spoken)")
+                    try WAV.data(try model.speak(spoken, reference: marked, seed: 42), sampleRate: F5TTS.sampleRate)
+                        .write(to: URL(fileURLWithPath: out).appendingPathComponent("\(name)-stress.wav"))
+                }
             }
             exit(0)
         } catch {

@@ -2,7 +2,8 @@ import Foundation
 import MLX
 
 /// F5-TTS Russian (Misha24-10/F5-TTS_RUSSIAN, CC-BY-NC-4.0), as seen from the app: downloads
-/// the model, makes the short clip of a voice it imitates, and talks to its helper process.
+/// the model, makes the short clip of a voice it imitates, marks stress, and talks to its
+/// helper process.
 actor F5RussianVoice {
     private struct RemoteFile {
         let name: String
@@ -13,6 +14,18 @@ actor F5RussianVoice {
     /// Pinned to the revisions this was tested with. The largest comes last, and only
     /// finished files get their final name, so its presence means the download is complete.
     private static let files = [
+        RemoteFile(
+            name: "accents.json.gz",
+            url: "https://huggingface.co/ruaccent/accentuator/resolve/b78ae5ea1e62beaf138bed1865cd8c3b0b5ca855/dictionary/accents.json.gz",
+            bytes: 20_954_156),
+        RemoteFile(
+            name: "omographs.json.gz",
+            url: "https://huggingface.co/ruaccent/accentuator/resolve/b78ae5ea1e62beaf138bed1865cd8c3b0b5ca855/dictionary/omographs.json.gz",
+            bytes: 219_047),
+        RemoteFile(
+            name: "yo_words.json.gz",
+            url: "https://huggingface.co/ruaccent/accentuator/resolve/b78ae5ea1e62beaf138bed1865cd8c3b0b5ca855/dictionary/yo_words.json.gz",
+            bytes: 548_914),
         RemoteFile(
             name: "vocab.txt",
             url: "https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN/resolve/ea166adeae4c80ec5ee423a671e2bdb83906cf84/F5TTS_v1_Base/vocab.txt",
@@ -33,9 +46,12 @@ actor F5RussianVoice {
 
     /// What the reference clip says. Generating time grows with its length, so it's short.
     static let referenceText = "Сегодня хорошая погода, можно прогуляться."
+    /// The same, marked, for reading alongside marked text.
+    static let markedReferenceText = "Сег+одня хор+ошая пог+ода, м+ожно прогул+яться."
 
     private let multilingual: MultilingualVoices
     private var worker: Task<WorkerProcess, Error>?
+    private var stress: RussianStress?
 
     init(multilingual: MultilingualVoices) {
         self.multilingual = multilingual
@@ -45,15 +61,26 @@ actor F5RussianVoice {
     /// model. Everything after the first load is quick.
     func prepare(voice: String, progress: @escaping @Sendable (Double) -> Void) async throws {
         try await download(progress: progress)
-        _ = try await speak("Да.", voice: voice, speed: 1)
+        let folder = Self.folder
+        if !FileManager.default.fileExists(atPath: folder.appendingPathComponent(RussianStress.indexName).path) {
+            try await Task.detached { try RussianStress.buildIndex(folder: folder) }.value
+        }
+        stress = RussianStress(folder: folder)
+        _ = try await speak("Да.", voice: voice, speed: 1, steps: 8, marksStress: false)
     }
 
-    /// 24 kHz samples.
-    func speak(_ text: String, voice: String, speed: Float) async throws -> [Float] {
+    /// 24 kHz samples. `steps` trades speed for quality.
+    func speak(_ text: String, voice: String, speed: Float, steps: Int, marksStress: Bool) async throws -> [Float] {
         let reference = try await referenceClip(voice: voice)
+        var spoken = Self.spellingOutNumbers(text)
+        var referenceText = Self.referenceText
+        if marksStress, let stress {
+            spoken = stress.marked(spoken)
+            referenceText = Self.markedReferenceText
+        }
         return try await liveWorker().request(
-            Self.spellingOutNumbers(text),
-            options: ["reference": reference.path, "referenceText": Self.referenceText, "speed": speed])
+            spoken,
+            options: ["reference": reference.path, "referenceText": referenceText, "speed": speed, "steps": steps])
     }
 
     /// Frees its memory; the next `speak` loads it again.
@@ -227,11 +254,14 @@ enum F5Worker {
                 send(["id": id, "error": "F5-TTS got an incomplete request"])
                 continue
             }
-            let reference = references[path] ?? model.reference(samples: WAV.samples(clip), text: referenceText)
-            references[path] = reference
+            // Marked and unmarked versions of the text are different references.
+            let key = path + referenceText
+            let reference = references[key] ?? model.reference(samples: WAV.samples(clip), text: referenceText)
+            references[key] = reference
             do {
                 let speed = (json["speed"] as? NSNumber)?.floatValue ?? 1
-                let samples = try model.speak(text, reference: reference, speed: speed)
+                let steps = json["steps"] as? Int ?? 8
+                let samples = try model.speak(text, reference: reference, speed: speed, steps: steps)
                 send(["id": id, "pcm": WorkerProcess.pcmBase64(samples)])
             } catch {
                 send(["id": id, "error": error.localizedDescription])
