@@ -1,9 +1,9 @@
 #!/bin/bash
-# Renders the icon (default variant: bubble) and builds Resources/AppIcon.icns with every size macOS uses.
-# Usage: scripts/make-icns.sh [orb|bubble|smile]
+# Renders the icon (default variant: record) and builds Resources/AppIcon.icns with every size macOS uses.
+# Usage: scripts/make-icns.sh [record|orb|bubble|smile]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VARIANT="${1:-bubble}"
+VARIANT="${1:-record}"
 WORK=$(mktemp -d)
 mkdir -p Resources "$WORK/AppIcon.iconset"
 swift scripts/make-icon.swift Resources/AppIcon-1024.png "$VARIANT"

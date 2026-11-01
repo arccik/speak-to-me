@@ -78,8 +78,27 @@ final class SpeechModels {
         }
     }
 
-    /// Speaks with the model chosen for `language`, or the next that can (see `SpeechSetup.route`).
+    /// Speaks `text`, performing any SSML in it (see `SSML`).
     func speak(_ text: String, language: String = "en", using setup: SpeechSetup) async throws -> [Float] {
+        guard SSML.hasMarkup(text) else { return try await speakWords(text, language: language, using: setup) }
+        guard setup.expressive else { return try await speakWords(SSML.plain(text), language: language, using: setup) }
+        var out: [Float] = []
+        for segment in SSML.segments(of: text) {
+            switch segment {
+            case .pause(let seconds):
+                out += [Float](repeating: 0, count: Int(seconds * 24_000))
+            case .words(let words, let rate, let semitones):
+                // Lowering the pitch also slows it down, so have the engine speak that much faster.
+                var adjusted = setup
+                adjusted.speed = setup.speed * rate / SSML.pitchFactor(semitones)
+                out += SSML.shifted(try await speakWords(words, language: language, using: adjusted), semitones: semitones)
+            }
+        }
+        return out
+    }
+
+    /// Speaks with the model chosen for `language`, or the next that can (see `SpeechSetup.route`).
+    private func speakWords(_ text: String, language: String, using setup: SpeechSetup) async throws -> [Float] {
         var failure: Error?
         for engine in setup.route(for: language) {
             do {

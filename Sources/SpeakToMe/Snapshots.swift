@@ -20,17 +20,25 @@ enum Snapshots {
             .init(role: "user", text: "What's the weather there right now?"),
             .init(role: "assistant", text: "It's about minus eight at the summit, with strong winds and clear skies.", note: "Searched the web: weather Mount Elbrus"),
         ]
-        let states: [(String, VoiceSession.Phase, [VoiceSession.Line], Float, Float, Bool)] = [
-            ("1-ready-empty", .ready, [], 0, 0, false),
-            ("2-hearing-live", .hearing, Array(conversation.prefix(2)), 0.7, 0, false),
-            ("3-thinking", .thinking, Array(conversation.prefix(5)) + [.init(role: "assistant", text: "")], 0, 0, false),
-            ("4-speaking", .speaking, conversation, 0, 0.75, false),
-            ("4b-speaking-chat", .speaking, conversation, 0, 0.75, true),
-            ("5-error", .failed("Can't reach oMLX at http://127.0.0.1:8000. Is the oMLX app running?"), [], 0, 0, false),
+        let russian: [VoiceSession.Line] = [
+            .init(role: "user", text: "Какая самая высокая гора в Европе?"),
+            .init(role: "assistant", text: "Эльбрус на Кавказе, примерно пять тысяч шестьсот сорок два метра."),
+        ]
+        let states: [(String, VoiceSession.Phase, [VoiceSession.Line], Float, Float, Bool, CGSize)] = [
+            ("1-ready-empty", .ready, [], 0, 0, false, .standard),
+            ("2-hearing-live", .hearing, Array(conversation.prefix(2)), 0.72, 0, false, .standard),
+            ("3-thinking", .thinking, Array(conversation.prefix(5)) + [.init(role: "assistant", text: "")], 0, 0, false, .standard),
+            ("4-speaking", .speaking, conversation, 0, 0.75, false, .standard),
+            ("4b-speaking-chat", .speaking, conversation, 0, 0.75, true, .standard),
+            ("5-error", .failed("Can't reach oMLX at http://127.0.0.1:8000. Is the oMLX app running?"), [], 0, 0, false, .standard),
+            ("6-small", .speaking, conversation, 0, 0.75, false, CGSize(width: 440, height: 640)),
+            ("7-wide", .hearing, conversation, 0.72, 0, false, CGSize(width: 1280, height: 800)),
+            ("8-russian", .speaking, russian, 0, 0.7, false, .standard),
+            ("9-ten-minutes-in", .hearing, conversation, 0.72, 0, false, .standard),
         ]
         let chatWasOpen = UserDefaults.standard.object(forKey: "chatOpen")
         defer { UserDefaults.standard.set(chatWasOpen, forKey: "chatOpen") }
-        for (name, phase, lines, mic, speaker, chatOpen) in states {
+        for (name, phase, lines, mic, speaker, chatOpen, size) in states {
             UserDefaults.standard.set(chatOpen, forKey: "chatOpen")
             let session = VoiceSession()
             session.phase = phase
@@ -41,7 +49,10 @@ enum Snapshots {
             session.modelID = "gemma-4-26b-a4b-it-4bit"
             session.levels.mic = mic
             session.levels.speaker = speaker
-            let view = ContentView().environment(session).frame(width: 520, height: 800)
+            LatheEngine.shared = LatheEngine()
+            LatheEngine.shared.sync(lines: lines)
+            playIn(phase, levels: session.levels, frames: name.hasPrefix("9") ? 18_000 : 420)
+            let view = ContentView().environment(session).frame(width: size.width, height: size.height)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2
             guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
@@ -49,36 +60,40 @@ enum Snapshots {
             else { continue }
             try? png.write(to: dir.appendingPathComponent("\(name).png"))
         }
-        renderOrbs(to: dir)
+        renderPuck(to: dir)
         renderSettings(to: dir)
     }
 
-    /// The Metal orb next to the Canvas one it imitates (left), over the window's background.
-    private static func renderOrbs(to dir: URL) {
-        guard let metal = OrbRenderer.shared else { return }
-        let points = 460, scale = 2
-        for (name, phase, level) in [("ready", VoiceSession.Phase.ready, 0.0), ("listening", .listening, 0.5),
-                                     ("thinking", .thinking, 0.2), ("speaking", .speaking, 0.7)] {
-            let animator = MoodAnimator()
-            animator.step(to: .of(phase), level: level, now: 0)
-            let canvas = Canvas { context, size in MistOrb.draw(animator, in: &context, size: size) }
-                .frame(width: CGFloat(points), height: CGFloat(points))
-            let renderer = ImageRenderer(content: canvas)
-            renderer.scale = CGFloat(scale)
-            let pixels = points * scale
-            guard let reference = renderer.cgImage, let shaded = metal.image(of: animator, pixels: pixels),
-                  let context = CGContext(data: nil, width: pixels * 2, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
-                                          space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    /// A few seconds of syllables, so the newest grooves look the way they do mid-sentence.
+    private static func playIn(_ phase: VoiceSession.Phase, levels: AudioLevels, frames: Int = 420) {
+        let engine = LatheEngine.shared
+        let mic = levels.mic, speaker = levels.speaker
+        var now = 0.0
+        engine.step(phase: .ready, muted: false, levels: levels, now: now)
+        for frame in 0..<frames {
+            now += 1.0 / 30
+            let syllable = Float(max(0, sin(Double(frame) * 0.42) * sin(Double(frame) * 0.09 + 1)))
+            levels.mic = mic * (0.25 + 0.75 * syllable)
+            levels.speaker = speaker * (0.25 + 0.75 * syllable)
+            engine.step(phase: phase, muted: false, levels: levels, now: now)
+        }
+        levels.mic = mic
+        levels.speaker = speaker
+    }
+
+    /// The floating record, on a checker so its transparent corners show.
+    private static func renderPuck(to dir: URL) {
+        guard let metal = LatheRenderer.shared else { return }
+        for (name, phase) in [("listening", VoiceSession.Phase.hearing), ("thinking", .thinking), ("speaking", .speaking)] {
+            let levels = AudioLevels()
+            levels.mic = 0.7
+            levels.speaker = 0.7
+            LatheEngine.shared = LatheEngine()
+            playIn(phase, levels: levels)
+            guard let frame = metal.image(of: .shared, layout: LatheLayout(style: .puck), points: CGSize(width: 150, height: 150), scale: 2),
+                  let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:])
             else { continue }
-            context.setFillColor(CGColor(srgbRed: 0x10 / 255, green: 0x13 / 255, blue: 0x2A / 255, alpha: 1))
-            context.fill(CGRect(x: 0, y: 0, width: pixels * 2, height: pixels))
-            context.draw(reference, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
-            context.draw(shaded, in: CGRect(x: pixels, y: 0, width: pixels, height: pixels))
-            guard let image = context.makeImage(),
-                  let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
-            else { continue }
-            try? png.write(to: dir.appendingPathComponent("orb-\(name).png"))
+            try? png.write(to: dir.appendingPathComponent("puck-\(name).png"))
         }
     }
 
@@ -118,4 +133,8 @@ enum Snapshots {
         }
         capture(0)
     }
+}
+
+private extension CGSize {
+    static let standard = CGSize(width: 520, height: 800)
 }

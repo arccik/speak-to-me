@@ -10,8 +10,8 @@ struct SettingsView: View {
 
         var subtitle: String {
             switch self {
-            case .general: return "Sounds, the floating orb and your history"
-            case .shortcuts: return "Talk or bring up the orb from any app"
+            case .general: return "Sounds, the floating record and your history"
+            case .shortcuts: return "Talk or bring up the record from any app"
             case .voice: return "Which model speaks each language, and how"
             case .cloning: return "Hear replies in a voice you record"
             case .conversation: return "Turn-taking, personality and tools"
@@ -29,17 +29,6 @@ struct SettingsView: View {
             case .model: return "cpu.fill"
             }
         }
-
-        var color: Color {
-            switch self {
-            case .general: return Color(white: 0.5)
-            case .shortcuts: return RGBA.hex(0x3FA6FF).color()
-            case .voice: return RGBA.hex(0x8E62F7).color()
-            case .cloning: return RGBA.hex(0xE0569B).color()
-            case .conversation: return RGBA.hex(0x2CC4A6).color()
-            case .model: return RGBA.hex(0xF08A3C).color()
-            }
-        }
     }
 
     /// Taller for Snapshots, so a whole pane fits in the picture.
@@ -50,12 +39,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(Pane.allCases, selection: Binding(get: { pane }, set: { if let p = $0 { pane = p } })) { pane in
-                Label {
-                    Text(pane.title)
-                } icon: {
-                    IconTile(systemImage: pane.icon, color: pane.color, size: 22)
-                }
-                .padding(.vertical, 2)
+                Label(pane.title, systemImage: pane.icon)
+                    .padding(.vertical, 2)
             }
             .navigationSplitViewColumnWidth(190)
             .toolbar(removing: .sidebarToggle)
@@ -74,42 +59,23 @@ struct SettingsView: View {
             .navigationTitle(pane.title)
         }
         .frame(width: 720, height: Self.height)
-        .tint(Theme.violet)
+        .tint(Theme.vinyl)
     }
 }
 
 // MARK: - Building blocks
 
-/// A rounded square with a white symbol, like System Settings' sidebar icons.
-private struct IconTile: View {
-    let systemImage: String
-    let color: Color
-    var size: CGFloat = 22
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.52, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(
-                LinearGradient(colors: [color.opacity(0.85), color], startPoint: .top, endPoint: .bottom),
-                in: RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
-    }
-}
-
-/// Icon, title and one line of explanation at the top of each pane.
+/// The pane's name, set large, and one line of explanation.
 private struct PaneHeader: View {
     let pane: SettingsView.Pane
 
     var body: some View {
         Section {
-            HStack(spacing: 14) {
-                IconTile(systemImage: pane.icon, color: pane.color, size: 32)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(pane.title).font(.headline)
-                    Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(pane.title).font(.display(22))
+                Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
             }
+            .listRowBackground(Color.clear)
         }
     }
 }
@@ -176,15 +142,15 @@ private struct GeneralPane: View {
                 Toggle("Speak replies out loud", isOn: Binding(get: { !session.muteReplies }, set: { session.muteReplies = !$0 }))
             }
             Section {
-                Toggle("Show the floating orb", isOn: $orbVisible)
+                Toggle("Show the floating record", isOn: $orbVisible)
                     .onChange(of: orbVisible) {
                         orbVisible ? MiniOrbController.shared.show(session: session) : MiniOrbController.shared.hide()
                     }
                 Toggle("Show it when I use the talk shortcut in another app", isOn: $orbOnHotKey)
             } header: {
-                Text("Floating orb")
+                Text("Floating record")
             } footer: {
-                Footer("A small always-on-top orb you can drag anywhere. Click it to start or stop, right-click for options.")
+                Footer("A small always-on-top record you can drag anywhere. Click it to start or stop, right-click for options.")
             }
             Section {
                 LabeledContent("Saved conversations") {
@@ -217,7 +183,7 @@ private struct ShortcutsPane: View {
             PaneHeader(pane: .shortcuts)
             Section {
                 row("Start or stop talking", detail: "Works in every app", action: .talk)
-                row("Show or hide the floating orb", detail: "Keep it in a corner while you work", action: .floatingOrb)
+                row("Show or hide the floating record", detail: "Keep it in a corner while you work", action: .floatingOrb)
             } header: {
                 Text("From any app")
             } footer: {
@@ -287,6 +253,11 @@ private struct VoicePane: View {
                 Text("Playback")
             } footer: {
                 Footer("Model changes apply from the next reply. If a model can't speak a sentence, the next available one does.")
+            }
+            Section {
+                Toggle("Expressive voice", isOn: $session.expressiveVoice)
+            } footer: {
+                Footer("Lets the language model add pauses and change the speed and pitch of its voice, with any speech model and in any language. Applies from the next reply.")
             }
         }
     }
@@ -624,7 +595,7 @@ private struct ClonedVoiceRow: View {
                 if session.f5VoiceID == voice.id {
                     Label("In use", systemImage: "checkmark.circle.fill")
                         .font(.callout)
-                        .foregroundStyle(Theme.violet)
+                        .foregroundStyle(Theme.acid)
                 } else {
                     Button("Use") { session.f5VoiceID = voice.id }
                 }
@@ -757,7 +728,7 @@ private struct PresetChip: View {
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? AnyShapeStyle(Theme.brand) : AnyShapeStyle(Color.primary.opacity(0.07)), in: Capsule())
+                .background(selected ? AnyShapeStyle(Theme.vinyl) : AnyShapeStyle(Color.primary.opacity(0.07)), in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

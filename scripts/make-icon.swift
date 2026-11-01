@@ -1,11 +1,11 @@
-// Draws the Speak to Me app icon — the app's misty orb on a night-blue tile — and
-// writes a 1024 px PNG. Usage: swift scripts/make-icon.swift <out.png> [orb|bubble|smile]
+// Draws the Speak to Me app icon — a live-cut record — and
+// writes a 1024 px PNG. Usage: swift scripts/make-icon.swift <out.png> [record|orb|bubble|smile]
 import AppKit
 import CoreImage
 
 let args = CommandLine.arguments
 let output = URL(fileURLWithPath: args.count > 1 ? args[1] : "AppIcon-1024.png")
-let variant = args.count > 2 ? args[2] : "bubble"
+let variant = args.count > 2 ? args[2] : "record"
 
 let size = 1024
 let space = CGColorSpaceCreateDeviceRGB()
@@ -14,6 +14,55 @@ let ci = CIContext()
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
     CGColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255, alpha: a)
+}
+
+// The record: cherry vinyl with one hot groove of white and yellow waves, a cobalt label.
+if variant == "record" {
+    let c = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
+    let center = CGPoint(x: 512, y: 512)
+    let tilePath = CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil)
+    c.saveGState()
+    c.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: rgb(0x000000, 0.35))
+    c.addPath(tilePath)
+    c.setFillColor(rgb(0xE5102B))
+    c.fillPath()
+    c.restoreGState()
+    c.addPath(tilePath)
+    c.clip()
+    c.setStrokeColor(rgb(0x8A0A1C, 0.75))
+    c.setLineWidth(3)
+    for r in stride(from: CGFloat(250), to: 620, by: 24) {
+        c.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+    }
+    func wave(radius: CGFloat, amplitude: CGFloat, cycles: CGFloat, shift: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        for i in 0...720 {
+            let t = CGFloat(i) / 720 * 2 * .pi
+            let r = radius + amplitude * (sin(t * cycles + shift) * 0.7 + sin(t * (cycles + 5) + shift * 2) * 0.3)
+            let p = CGPoint(x: center.x + cos(t) * r, y: center.y + sin(t) * r)
+            i == 0 ? path.move(to: p) : path.addLine(to: p)
+        }
+        path.closeSubpath()
+        return path
+    }
+    c.setLineWidth(11)
+    c.setLineJoin(.round)
+    c.setStrokeColor(rgb(0xF4FF3A))
+    c.addPath(wave(radius: 345, amplitude: 34, cycles: 11, shift: 0.7))
+    c.strokePath()
+    c.setStrokeColor(rgb(0xFFFFFF))
+    c.addPath(wave(radius: 262, amplitude: 28, cycles: 9, shift: 2.1))
+    c.strokePath()
+    c.setFillColor(rgb(0x1420FF))
+    c.fillEllipse(in: CGRect(x: center.x - 190, y: center.y - 190, width: 380, height: 380))
+    c.setFillColor(rgb(0xF4FF3A))
+    c.fillEllipse(in: CGRect(x: center.x - 38, y: center.y - 38, width: 76, height: 76))
+    let rep = NSBitmapImageRep(cgImage: c.makeImage()!)
+    try! rep.representation(using: .png, properties: [:])!.write(to: output)
+    print("wrote \(output.path)")
+    exit(0)
 }
 
 /// Draws into a transparent full-size layer (origin top-left), optionally blurred.

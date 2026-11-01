@@ -251,6 +251,111 @@ extension SelfTest {
     /// `SpeakToMe --speechtest`: every model choice for every language group, switched on
     /// one running set of models, with what Parakeet hears back. With a folder, also
     /// writes each as a WAV to compare by ear.
+    /// `SpeakToMe --ssmltest`: SSML in a reply never reaches the screen or the words spoken,
+    /// and its pauses, rate and pitch change the audio, on every engine. Plays nothing.
+    /// With a model name it only asks that model, with and without Expressive voice's prompt.
+    static func ssml(model: String? = nil) async {
+        var failures = 0
+        func check(_ name: String, _ ok: Bool, _ detail: Any = "") {
+            print("\(ok ? "ok  " : "FAIL") \(name) \(detail)")
+            if !ok { failures += 1 }
+        }
+        if let model {
+            let client = await OMLXClient.fromSettings()
+            let questions = ["What is the tallest mountain in Europe?",
+                             "Tell me a very short spooky story, in a mysterious voice.",
+                             "Расскажи очень короткую страшную историю загадочным голосом."]
+            for (name, prompt) in [("off", VoiceSession.defaultPrompt), ("on", VoiceSession.defaultPrompt + VoiceSession.expressivePrompt)] {
+                for question in questions {
+                    var reply = ""
+                    do {
+                        let messages: [OMLXClient.Message] = [.init(role: "system", content: prompt), .init(role: "user", content: question)]
+                        for try await event in client.streamChat(model: model, messages: messages, tools: []) {
+                            if case .text(let token) = event { reply += token }
+                        }
+                    } catch { print("FAIL \(error)"); exit(1) }
+                    print("--- expressive \(name): \(question)\nraw: \(reply)\nshown: \(SentenceChunker.visible(reply))\nsegments: \(SSML.segments(of: reply).count), markup: \(SSML.hasMarkup(reply))")
+                }
+            }
+            exit(0)
+        }
+        let reply = """
+            <speak>
+              <prosody rate="slow" pitch="-2st">
+                <break time="1s"/>
+                Yes... I can hear you perfectly now.
+                <break time="500ms"/>
+                The shadows are finally starting to make sense.
+              </prosody>
+            </speak>
+            """
+        let shown = SentenceChunker.visible(reply)
+        check("shown without tags", shown == "Yes... I can hear you perfectly now. The shadows are finally starting to make sense.", shown)
+        check("half-arrived tag hidden", SentenceChunker.visible("Hello there <pros") == "Hello there", SentenceChunker.visible("Hello there <pros"))
+        check("ordinary < survives", SentenceChunker.visible("Is 2 < 3? Yes.") == "Is 2 < 3? Yes.", SentenceChunker.visible("Is 2 < 3? Yes."))
+        check("plain text untouched", !SSML.hasMarkup("Hello, how are you?"))
+
+        // Token by token, the way a model streams it.
+        var chunker = SentenceChunker()
+        var pieces: [String] = []
+        var rest = Substring(reply)
+        while !rest.isEmpty {
+            pieces += chunker.push(String(rest.prefix(3)))
+            rest = rest.dropFirst(3)
+        }
+        pieces += chunker.finish()
+        print("     pieces: \(pieces)")
+        let segments = pieces.flatMap(SSML.segments(of:))
+        print("     segments: \(segments)")
+        let spokenWords = segments.compactMap { segment -> (String, Float, Float)? in
+            if case .words(let w, let r, let s) = segment { return (w, r, s) }
+            return nil
+        }
+        let pauses = segments.compactMap { segment -> Float? in
+            if case .pause(let p) = segment { return p }
+            return nil
+        }
+        check("both sentences kept their prosody across the cut",
+              spokenWords.count == 2 && spokenWords.allSatisfy { $0.1 == 0.8 && $0.2 == -2 })
+        check("both pauses found", pauses == [1, 0.5], pauses)
+        check("no tag in the words", !spokenWords.contains { $0.0.contains("<") || $0.0.contains("prosody") })
+
+        let speech: SpeechModels
+        do { speech = try await SpeechModels.load(voice: "af_heart") { _ in } } catch {
+            print("load failed: \(error)"); exit(1)
+        }
+        let lines: [SpeechSlot: (language: String, text: String)] = [
+            .english: ("en", "The shadows are finally starting to make sense."),
+            .russian: ("ru", "Твой сигнал пробился сквозь туман, капитан."),
+            .other: ("pl", "Najwyższą górą w Europie jest Elbrus."),
+        ]
+        for slot in SpeechSlot.allCases {
+            guard let line = lines[slot] else { continue }
+            for engine in slot.engines where engine != .myVoice {
+                let setup = SpeechSetup(engines: [slot: engine])
+                do {
+                    try await speech.prepare(engine, using: setup)
+                    let plain = try await speech.speak(line.text, language: line.language, using: setup)
+                    let marked = "<speak><break time=\"1s\"/><prosody pitch=\"-2st\">\(line.text)</prosody></speak>"
+                    let audio = try await speech.speak(marked, language: line.language, using: setup)
+                    let lead = audio.prefix(24_000).allSatisfy { $0 == 0 }
+                    var off = setup
+                    off.expressive = false
+                    let dropped = try await speech.speak(marked, language: line.language, using: off)
+                    check("\(slot) \(engine.rawValue) off: no pause added", !dropped.prefix(24_000).allSatisfy { $0 == 0 })
+                    let heard = try await speech.transcribe(Resampler.convert(audio, from: 24_000, to: 16_000))
+                    let leaked = ["prosody", "speak", "pitch", "break time"].contains { heard.lowercased().contains($0) } && !line.text.lowercased().contains("speak")
+                    let seconds = { (samples: [Float]) in String(format: "%.2fs", Double(samples.count) / 24_000) }
+                    check("\(slot) \(engine.rawValue)", lead && !leaked, "plain \(seconds(plain)), marked \(seconds(audio)) (with 1s pause), heard: \(heard)")
+                } catch {
+                    print("skip \(slot) \(engine.rawValue): \(error)")
+                }
+            }
+        }
+        print(failures == 0 ? "SSML PASS" : "SSML FAIL \(failures)")
+        exit(failures == 0 ? 0 : 1)
+    }
+
     static func speechModels(writingTo dir: String?) async {
         let lines: [SpeechSlot: (language: String, text: String)] = [
             .english: ("en", "The tallest mountain in Europe is Mount Elbrus."),

@@ -1,93 +1,152 @@
 import SwiftUI
 
 enum Theme {
-    static let backgroundTop = RGBA.hex(0x10132A).color()
-    static let backgroundBottom = RGBA.hex(0x0A0B18).color()
-    static let surface = Color.white.opacity(0.06)
-    static let hairline = Color.white.opacity(0.09)
-    static let text = Color.white.opacity(0.92)
-    static let secondary = Color.white.opacity(0.62)
-    static let tertiary = Color.white.opacity(0.42)
-    static let accent = RGBA.hex(0x46C8F0).color()
-    static let violet = RGBA.hex(0x8E62F7).color()
-    static let brand = LinearGradient(colors: [accent, violet], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let vinyl = Mood.cherry.color()
+    static let cobalt = Mood.cobalt.color()
+    static let acid = Mood.replyInk.color()
+    /// Long replies on the sleeve: the reply's yellow, calmed down enough to read for a while.
+    static let replyText = RGBA.hex(0xFBFFC2).color()
+    static let text = Color.white
+    static let hover = Color.white.opacity(0.18)
+}
+
+extension Font {
+    /// Sleeve lettering: heavy and geometric. Avenir Next is Latin only, so text in any other
+    /// script is set in the system face as a whole, rather than with Avenir's punctuation mixed in.
+    static func display(_ size: CGFloat, weight: Font.Weight = .heavy, for text: String = "") -> Font {
+        let latin = text.unicodeScalars.allSatisfy { !$0.properties.isAlphabetic || $0.value < 0x250 }
+        return latin ? .custom("Avenir Next", size: size).weight(weight) : .system(size: size, weight: weight)
+    }
+
+    static func stamp(_ size: CGFloat) -> Font {
+        .custom("Avenir Next Condensed", size: size).weight(.heavy)
+    }
 }
 
 struct ContentView: View {
     @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
+    @State private var scratching = false
+    @State private var scratchLine: UUID?
+    @State private var awake = false
+    @State private var lastAngle: Double?
+    @State private var wordsHeight: CGFloat = 0
+
+    private var showChat: Bool { chatOpen && !session.lines.isEmpty }
 
     var body: some View {
-        let showChat = chatOpen && !session.lines.isEmpty
-        ZStack {
-            Backdrop()
-            VStack(spacing: 0) {
-                TopBar()
-                if !showChat { Spacer(minLength: 0) }
-                hero(compact: showChat)
-                if showChat {
-                    Transcript()
-                        .transition(.opacity.combined(with: .offset(y: 30)))
-                } else {
-                    Group {
-                        if session.lines.isEmpty && (session.liveText ?? "").isEmpty {
-                            EmptyState()
-                        } else {
-                            Caption()
-                        }
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                record
+                    .ignoresSafeArea()
+                // The whole window is the control: click to talk, drag to scratch.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .pointerStyle(session.canToggle ? .link : .default)
+                    .onTapGesture { if session.canToggle { session.toggle() } }
+                    .gesture(scratch(in: geo.size))
+                    .accessibilityElement()
+                    .accessibilityLabel(session.isActive ? "Stop talking" : "Start talking")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { if session.canToggle { session.toggle() } }
+                VStack(alignment: .leading, spacing: 0) {
+                    TopBar()
+                    if !showChat {
+                        StatusLine(scratching: scratching)
+                            .padding(.horizontal, 22)
+                            .padding(.top, 8)
                     }
-                    .transition(.opacity)
-                    Spacer(minLength: 0)
+                    Spacer(minLength: showChat ? LatheRenderer.sleeveTop - 30 : 0)
+                    if showChat {
+                        Sleeve()
+                            .transition(.move(edge: .bottom))
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Group {
+                                if session.lines.isEmpty && (session.liveText ?? "").isEmpty && !session.hasProblem {
+                                    EmptyWords()
+                                } else {
+                                    Words(scratchLine: scratchLine)
+                                }
+                            }
+                            .transition(.opacity)
+                            Dock()
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 16)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { wordsHeight = $0 }
+                    }
                 }
-                Dock()
+                .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
             }
-            .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
-            .animation(.spring(duration: 0.6, bounce: 0.12), value: showChat)
+            .animation(.spring(duration: 0.55, bounce: 0.1), value: showChat)
         }
+        .tint(.white)
         .preferredColorScheme(.dark)
         .onAppear(perform: SpaceKey.install)
+        .modifier(RecordSync())
     }
 
-    /// The orb is the whole show until you open the chat, then it shrinks to make room for it.
-    private func hero(compact: Bool) -> some View {
-        // Negative spacing: the cloud only fills the middle of its canvas, so tuck the label under it.
-        VStack(spacing: compact ? -4 : -70) {
-            MistOrb(phase: session.phase, levels: session.levels)
-                .aspectRatio(1, contentMode: .fit)
-                .frame(minWidth: 0, maxWidth: compact ? 120 : 460, minHeight: 0, maxHeight: compact ? 120 : 460)
-                .contentShape(Circle().scale(0.6))
-                .onTapGesture { if session.canToggle { session.toggle() } }
-                .help(session.isActive ? "Stop" : "Start talking")
-            StatusLabel()
-        }
-        .padding(.top, compact ? 0 : 4)
-        .padding(.bottom, compact ? 4 : 0)
+    private var record: some View {
+        Record(phase: session.phase, muted: session.micMuted, levels: session.levels,
+               layout: LatheLayout(style: .stage,
+                                   labelText: "SPEAK TO ME  \u{00B7}  \(session.modelID.isEmpty ? "SIDE A" : session.modelID)  \u{00B7}  ",
+                                   // A still has no second pass to measure in, so it uses a typical height.
+                                   hush: showChat ? 0 : Snapshots.isRendering ? 210 : wordsHeight + 10, peek: showChat),
+               awake: awake)
+    }
+
+    /// Round and round the disc, backwards through what was said. Let go and it springs back.
+    private func scratch(in size: CGSize) -> some Gesture {
+        let center = LatheRenderer.center(in: size, style: .stage, peek: showChat ? 1 : 0)
+        return DragGesture(minimumDistance: 6)
+            .onChanged { drag in
+                let angle = atan2(drag.location.y - center.y, drag.location.x - center.x)
+                if let lastAngle {
+                    var delta = angle - lastAngle
+                    if delta > .pi { delta -= 2 * .pi } else if delta < -.pi { delta += 2 * .pi }
+                    LatheEngine.shared.scratch(byTurns: -delta / (2 * .pi) * 6)
+                }
+                lastAngle = angle
+                LatheEngine.shared.isScrubbing = true
+                awake = true
+                scratching = true
+                scratchLine = LatheEngine.shared.lineAtHead
+            }
+            .onEnded { _ in
+                lastAngle = nil
+                LatheEngine.shared.isScrubbing = false
+                scratching = false
+                scratchLine = nil
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if !LatheEngine.shared.isScrubbing { awake = false }
+                }
+            }
     }
 }
 
-// MARK: - Backdrop
-
-/// Deep navy, with a soft glow behind the orb that takes on the colour of the current phase.
-private struct Backdrop: View {
+/// Keeps the record's grooves in step with the conversation.
+struct RecordSync: ViewModifier {
     @Environment(VoiceSession.self) private var session
-    @AppStorage("chatOpen") private var chatOpen = false
 
-    var body: some View {
-        let compact = chatOpen && !session.lines.isEmpty
-        ZStack {
-            LinearGradient(colors: [Theme.backgroundTop, Theme.backgroundBottom], startPoint: .top, endPoint: .bottom)
-            GeometryReader { geo in
-                Ellipse()
-                    .fill(Mood.of(session.phase).mid.color(compact ? 0.22 : 0.34))
-                    .frame(width: geo.size.width * 1.2, height: compact ? 260 : 560)
-                    .blur(radius: 120)
-                    .position(x: geo.size.width / 2, y: compact ? 60 : geo.size.height * 0.36)
-                    .animation(.easeInOut(duration: 0.9), value: session.phase)
-                    .animation(.spring(duration: 0.6), value: compact)
-            }
+    private var signature: String {
+        "\(session.lines.first?.id.uuidString ?? "")-\(session.lines.count)-\(session.lines.suffix(2).map(\.interrupted))"
+    }
+
+    func body(content: Content) -> some View {
+        content.onChange(of: signature, initial: true) { LatheEngine.shared.sync(lines: session.lines) }
+    }
+}
+
+extension VoiceSession {
+    var hasProblem: Bool {
+        if micNotice != nil { return true }
+        switch phase {
+        case .failed, .loading: return true
+        default: return false
         }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 }
 
@@ -100,24 +159,19 @@ private struct TopBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            TopIconButton(systemImage: "square.and.pencil", help: "New conversation (⌘N)") { session.newConversation() }
+            TopIconButton(systemImage: "square.and.pencil", help: "New conversation (\u{2318}N)") { session.newConversation() }
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(session.lines.isEmpty)
             HistoryButton()
-            TopIconButton(systemImage: chatOpen ? "text.bubble.fill" : "text.bubble",
-                          help: chatOpen ? "Hide the conversation (C)" : "Show the conversation (C)") {
-                chatOpen.toggle()
-            }
-            .disabled(session.lines.isEmpty)
             Spacer(minLength: 8)
             ModelMenu()
             TopIconButton(systemImage: "pip.enter",
-                          help: shortcuts.floatingOrb.map { "Floating orb (\($0.display))" } ?? "Floating orb") {
+                          help: shortcuts.floatingOrb.map { "Floating record (\($0.display))" } ?? "Floating record") {
                 MiniOrbController.shared.toggle(session: session)
             }
             SettingsLink { TopIconLabel(systemImage: "slider.horizontal.3") }
                 .buttonStyle(.plain)
-                .help("Settings (⌘,)")
+                .help("Settings (\u{2318},)")
         }
         .padding(.leading, 76) // keep clear of the window's traffic lights
         .padding(.trailing, 10)
@@ -137,7 +191,6 @@ private struct TopIconButton: View {
     }
 }
 
-/// Borderless until hovered, so the title bar row stays calm.
 private struct TopIconLabel: View {
     let systemImage: String
     @State private var hovering = false
@@ -145,14 +198,13 @@ private struct TopIconLabel: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(hovering ? Theme.text : Theme.secondary)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Theme.text)
             .frame(width: 28, height: 24)
-            .background(hovering ? Theme.surface : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .opacity(enabled ? 1 : 0.35)
+            .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .opacity(enabled ? 1 : 0.5)
             .contentShape(Rectangle())
             .onHover { hovering = $0 && enabled }
-            .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
 
@@ -230,30 +282,24 @@ private struct ModelMenu: View {
                     session.modelChanged()
                 } label: {
                     if model.id == session.modelID {
-                        Label("\(model.id)  ·  \(Self.gb(model.sizeBytes))", systemImage: "checkmark")
+                        Label("\(model.id)  \u{00B7}  \(Self.gb(model.sizeBytes))", systemImage: "checkmark")
                     } else {
-                        Text("\(model.id)  ·  \(Self.gb(model.sizeBytes))")
+                        Text("\(model.id)  \u{00B7}  \(Self.gb(model.sizeBytes))")
                     }
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(session.modelID.isEmpty ? Theme.tertiary : RGBA.hex(0x5BE0A0).color())
-                    .frame(width: 6, height: 6)
+            HStack(spacing: 5) {
                 Text(session.modelID.isEmpty ? "Model" : session.modelID)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Theme.tertiary)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .heavy))
             }
-            .font(.system(size: 11.5, weight: .medium))
-            .foregroundStyle(Theme.secondary)
-            .padding(.horizontal, 10)
+            .font(.display(12, weight: .bold))
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 6)
             .frame(height: 24)
-            .frame(maxWidth: 200)
-            .background(Theme.surface, in: Capsule())
-            .overlay(Capsule().stroke(Theme.hairline))
+            .frame(maxWidth: 190)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -274,89 +320,211 @@ private struct ModelMenu: View {
 
 // MARK: - Status
 
-/// One quiet line under the orb; the orb itself carries the mood.
-private struct StatusLabel: View {
+/// What's happening, in one word you can read from across the room.
+private struct StatusLine: View {
     @Environment(VoiceSession.self) private var session
+    let scratching: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 7) {
-                if case .loading = session.phase {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Circle().fill(dotColor).frame(width: 5, height: 5)
-                        .shadow(color: dotColor, radius: 4)
-                }
-                Text(title)
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .tracking(2)
-                    .contentTransition(.opacity)
-            }
-            .foregroundStyle(Theme.secondary)
-            .frame(height: 18)
-            .animation(.easeOut(duration: 0.25), value: title)
-
-            if let detail {
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(isProblem ? RGBA.hex(0xFF8A8A).color() : Theme.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .transition(.opacity)
-            }
-
-            if case .failed = session.phase {
-                Button { Task { await session.connect() } } label: {
-                    Text("Try Again")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.1), in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.stamp(24))
+                .foregroundStyle(Theme.text)
+                .contentTransition(.opacity)
+                .animation(.easeOut(duration: 0.2), value: title)
+            if let notice = session.micNotice {
+                Text(notice)
+                    .font(.display(13, weight: .bold))
+                    .foregroundStyle(Theme.text)
+                    .frame(maxWidth: 300, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .allowsHitTesting(false)
     }
 
     private var title: String {
-        if session.micMuted, session.phase == .listening { return "MIC MUTED" }
+        if scratching { return "Rewinding" }
+        if session.micMuted, session.phase == .listening { return "Mic muted" }
         switch session.phase {
-        case .loading: return "LOADING"
-        case .ready: return "READY"
-        case .listening: return "LISTENING"
-        case .hearing: return "HEARING YOU"
-        case .transcribing, .thinking: return "THINKING"
-        case .speaking: return "SPEAKING"
-        case .failed: return "ERROR"
+        case .loading: return "Warming up"
+        case .ready: return "Ready"
+        case .listening: return "Listening"
+        case .hearing: return "Hearing you"
+        case .transcribing, .thinking: return "Thinking"
+        case .speaking: return "Speaking"
+        case .failed: return "Stuck"
+        }
+    }
+}
+
+// MARK: - Words on the vinyl
+
+private struct EmptyWords: View {
+    @Environment(VoiceSession.self) private var session
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(session.isActive ? "Go ahead, I'm listening." : "Click anywhere and start talking.")
+                .font(.display(34))
+                .tracking(-0.5)
+                .lineSpacing(-2)
+                .foregroundStyle(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .allowsHitTesting(false)
+            HStack(spacing: 18) {
+                ForEach(["Tell me a fun fact", "Plan my evening", "Explain black holes"], id: \.self) { prompt in
+                    TextAction(text: prompt, help: "Ask this") { session.send(prompt) }
+                        .disabled(!session.canToggle)
+                }
+            }
+        }
+        .frame(maxWidth: 560, alignment: .leading)
+    }
+}
+
+/// With the sleeve closed, only what's being said right now: your words in white, the
+/// reply's in yellow, the same as their grooves. Long replies keep their newest words in view.
+private struct Words: View {
+    @Environment(VoiceSession.self) private var session
+    let scratchLine: UUID?
+
+    private struct Current: Equatable {
+        var id: String
+        var role: String
+        var text: String
+        var live: Bool
+        var interrupted = false
+    }
+
+    private var current: Current? {
+        if let scratchLine, let line = session.lines.first(where: { $0.id == scratchLine }) {
+            return Current(id: "scratch-\(line.id)", role: line.role, text: line.text, live: false, interrupted: line.interrupted)
+        }
+        switch session.phase {
+        case .loading(let message): return Current(id: "loading", role: "system", text: message, live: true)
+        case .failed(let message): return Current(id: "failed", role: "system", text: message, live: false)
+        default: break
+        }
+        if let text = session.liveText, !text.isEmpty {
+            return Current(id: "live", role: "user", text: text, live: true)
+        }
+        guard let line = session.lines.last else { return nil }
+        let speaking = line.role == "assistant" && !line.interrupted
+            && (session.phase == .thinking || session.phase == .speaking)
+        return Current(id: line.id.uuidString, role: line.role, text: session.currentText(of: line), live: speaking,
+                       interrupted: line.interrupted)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack(alignment: .bottomLeading) {
+                if let current {
+                    words(current)
+                        .id(current.id)
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 12)), removal: .opacity))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
+            .allowsHitTesting(false)
+            .animation(.easeOut(duration: 0.25), value: current?.id)
+            if case .failed = session.phase {
+                TextAction(text: "Try again", help: "Reconnect") { Task { await session.connect() } }
+            }
+        }
+        .frame(maxWidth: 620, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func words(_ current: Current) -> some View {
+        // Nothing written yet: the lifted arm and the blue disc say it's thinking.
+        if !current.text.isEmpty {
+            let shown = current.role == "system" ? Self.unbrokenLinks(current.text) : current.text
+            let size: CGFloat = current.role == "system" ? 26 : current.text.count < 70 ? 34 : current.text.count < 150 ? 26 : 21
+            Text(shown)
+                .font(.display(size, weight: size > 30 ? .heavy : .bold, for: shown))
+                .tracking(size > 30 ? -0.5 : -0.2)
+                .lineSpacing(size > 30 ? -2 : 1)
+                .foregroundStyle(color(current))
+                .opacity(current.interrupted ? 0.72 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: 190, alignment: .bottomLeading)
+                .fixedSize(horizontal: false, vertical: true) // only as tall as the words, up to that
+                .clipped()
+                // Newest words at the bottom; older ones fade out over the top.
+                .mask(
+                    LinearGradient(stops: [.init(color: current.text.count > 190 ? .clear : .black, location: 0),
+                                           .init(color: .black, location: 0.24)],
+                                   startPoint: .top, endPoint: .bottom))
         }
     }
 
-    private var detail: String? {
-        if let notice = session.micNotice { return notice }
-        switch session.phase {
-        case .loading(let message): return message
-        case .failed(let message): return message
-        default: return nil
-        }
+    /// Keeps an address like http://127.0.0.1:8000 in one piece when the line wraps.
+    private static func unbrokenLinks(_ text: String) -> String {
+        text.split(separator: " ", omittingEmptySubsequences: false).map { word in
+            word.contains("://") ? word.map(String.init).joined(separator: "\u{2060}") : String(word)
+        }.joined(separator: " ")
     }
 
-    private var isProblem: Bool {
-        if session.micNotice != nil { return true }
-        if case .failed = session.phase { return true }
-        return false
+    private func color(_ current: Current) -> Color {
+        current.role == "assistant" ? Theme.acid : Theme.text
     }
+}
 
-    private var dotColor: Color {
-        if session.micMuted, session.phase == .listening { return RGBA.hex(0xFFB36B).color() }
-        switch session.phase {
-        case .listening, .hearing: return Theme.accent
-        case .thinking, .transcribing: return Theme.violet
-        case .speaking: return RGBA.hex(0x3FA6FF).color()
-        case .failed: return .red
-        default: return Theme.secondary
+/// A word you can click: no box around it, just the word, underlined.
+private struct TextAction: View {
+    let text: String
+    var systemImage: String?
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let systemImage { Image(systemName: systemImage).font(.system(size: 11, weight: .heavy)) }
+                Text(text).underline(!hovering, color: Theme.text)
+            }
+            .font(.display(13, weight: .bold))
+            .foregroundStyle(hovering ? Mood.cherry.color() : Theme.text)
+            .padding(.horizontal, 6)
+            .frame(height: 26)
+            .background(hovering ? Color.white : .clear, in: Rectangle())
+            .padding(.horizontal, -6)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .opacity(enabled ? 1 : 0.55)
+        .onHover { hovering = $0 && enabled }
+        .help(help)
+    }
+}
+
+// MARK: - The sleeve
+
+/// The conversation slides up over the record like its sleeve, with the disc still
+/// turning above it.
+private struct Sleeve: View {
+    @Environment(VoiceSession.self) private var session
+    @AppStorage("chatOpen") private var chatOpen = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                StatusLine(scratching: false)
+                Spacer()
+                TextAction(text: "Hide", help: "Hide the conversation (C)") { chatOpen = false }
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            Transcript()
+            Dock()
+                .padding(.horizontal, 22)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+        }
+        .background(Theme.cobalt.ignoresSafeArea())
     }
 }
 
@@ -377,7 +545,7 @@ private struct Transcript: View {
                     LiveUserText()
                 }
                 .padding(.horizontal, 22)
-                .padding(.vertical, 18)
+                .padding(.vertical, 14)
                 .clipped()
             } else {
                 ScrollViewReader { proxy in
@@ -395,15 +563,12 @@ private struct Transcript: View {
                             Color.clear.frame(height: 1).id("bottom")
                         }
                         .padding(.horizontal, 22)
-                        .padding(.vertical, 18)
+                        .padding(.vertical, 14)
                         .animation(.easeOut(duration: 0.25), value: session.lines.count)
                     }
                     .scrollIndicators(.never)
-                    .mask(
-                        LinearGradient(
-                            stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08),
-                                    .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
-                            startPoint: .top, endPoint: .bottom))
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05)],
+                                         startPoint: .top, endPoint: .bottom))
                     .background(FollowLatest(proxy: proxy))
                 }
             }
@@ -443,171 +608,15 @@ private struct LiveUserText: View {
 
     var body: some View {
         if let text = session.liveText, !text.isEmpty {
-            HStack {
-                Spacer(minLength: 60)
-                HStack(spacing: 8) {
-                    Text(text)
-                        .font(.system(size: 14.5))
-                        .foregroundStyle(Theme.text.opacity(0.75))
-                    Image(systemName: "waveform")
-                        .font(.caption)
-                        .foregroundStyle(Theme.accent)
-                        .symbolEffect(.variableColor.iterative, options: .repeating)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(BubbleShape().stroke(Theme.accent.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-            }
-            .transition(.opacity)
-        }
-    }
-}
-
-private struct EmptyState: View {
-    @Environment(VoiceSession.self) private var session
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Text(session.isActive ? "Go ahead, I'm listening" : "Talk to your local AI")
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .foregroundStyle(Theme.text)
-            Text(session.isActive
-                 ? "Speak naturally. Pause when you're done, or talk over me to interrupt."
-                 : "Press Space or tap the orb, then just speak.")
-                .font(.callout)
-                .foregroundStyle(Theme.secondary)
-                .multilineTextAlignment(.center)
-            HStack(spacing: 8) {
-                ForEach(["Tell me a fun fact", "Plan my evening", "Explain black holes"], id: \.self) { prompt in
-                    SuggestionChip(text: prompt) { session.send(prompt) }
-                        .disabled(!session.canToggle)
-                }
-            }
-            .padding(.top, 4)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-    }
-}
-
-/// With the chat closed, only what's being said right now: your words as you speak,
-/// or the latest reply. Long replies keep their newest words in view; click to open the chat.
-private struct Caption: View {
-    @Environment(VoiceSession.self) private var session
-    @AppStorage("chatOpen") private var chatOpen = false
-    @State private var hovering = false
-
-    private struct Current: Equatable {
-        var id: String
-        var role: String
-        var text: String
-        var live: Bool
-        var interrupted = false
-    }
-
-    private var current: Current? {
-        if let text = session.liveText, !text.isEmpty {
-            return Current(id: "live", role: "user", text: text, live: true)
-        }
-        guard let line = session.lines.last else { return nil }
-        let speaking = line.role == "assistant" && !line.interrupted
-            && (session.phase == .thinking || session.phase == .speaking)
-        return Current(id: line.id.uuidString, role: line.role, text: session.currentText(of: line), live: speaking,
-                       interrupted: line.interrupted)
-    }
-
-    var body: some View {
-        Button { chatOpen = true } label: {
-            VStack(spacing: 10) {
-                // A fixed stage for the words, so the orb never shifts as they come and go.
-                ZStack(alignment: .top) {
-                    if let current {
-                        words(current)
-                            .id(current.id)
-                            .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)), removal: .opacity))
-                    }
-                }
-                .frame(height: 112)
-                .padding(.top, 10)
-                if !session.lines.isEmpty {
-                    HStack(spacing: 5) {
-                        Image(systemName: "chevron.up").font(.system(size: 9, weight: .bold))
-                        Text("Show conversation · \(session.lines.count)")
-                    }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(hovering ? Theme.secondary : Theme.tertiary)
-                    .padding(.horizontal, 12)
-                    .frame(height: 24)
-                    .background(hovering ? Theme.surface : .clear, in: Capsule())
-                    .overlay(Capsule().stroke(hovering ? Theme.hairline : .clear))
-                }
-            }
-            .frame(maxWidth: 440)
-            .padding(.horizontal, 28)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.15), value: hovering)
-        .animation(.easeOut(duration: 0.3), value: current?.id)
-        .help("Show the whole conversation (C)")
-    }
-
-    @ViewBuilder
-    private func words(_ current: Current) -> some View {
-        if current.text.isEmpty {
-            TypingDots()
-        } else {
-            let tail = current.live && current.role == "assistant" ? " ▍" : ""
-            (Text(current.text) + Text(tail).foregroundColor(Theme.accent))
-                .font(.system(size: current.role == "user" ? 17 : 18, weight: .regular, design: .rounded))
-                .lineSpacing(5)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(color(current))
-                .fixedSize(horizontal: false, vertical: true)
-                // Newest words at the bottom; older ones fade out over the top.
-                .frame(maxHeight: 112, alignment: needsFade(current.text) ? .bottom : .top)
-                .clipped()
-                .mask(
-                    LinearGradient(stops: [.init(color: needsFade(current.text) ? .clear : .black, location: 0),
-                                           .init(color: .black, location: 0.28)],
-                                   startPoint: .top, endPoint: .bottom))
-        }
-    }
-
-    private func color(_ current: Current) -> Color {
-        switch current.role {
-        case "error": return RGBA.hex(0xFF9A9A).color()
-        // Yours in a cool tint, so it's clear who's talking without a label.
-        case "user": return RGBA.hex(0xBFEFFF).color(current.live ? 0.75 : 0.85)
-        default: return Color.white.opacity(current.interrupted ? 0.5 : current.live ? 0.96 : 0.85)
-        }
-    }
-
-    /// Roughly more than four lines: only then does the top need to fade.
-    private func needsFade(_ text: String) -> Bool { text.count > 150 }
-}
-
-private struct SuggestionChip: View {
-    let text: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
             Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hovering ? Theme.text : Theme.secondary)
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(hovering ? Color.white.opacity(0.1) : Theme.surface, in: Capsule())
-                .overlay(Capsule().stroke(hovering ? Theme.accent.opacity(0.4) : Theme.hairline))
-                .contentShape(Capsule())
+                .font(.display(16, weight: .heavy, for: text))
+                .foregroundStyle(Theme.text)
+                .opacity(0.8)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 400, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .transition(.opacity)
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.15), value: hovering)
-        .help("Ask this")
     }
 }
 
@@ -628,36 +637,22 @@ private struct MessageRow: View {
         }
     }
 
+    /// Yours in heavy white on the right, the reply in pale yellow on the left: no bubbles.
     private var user: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            userBubble
+            Text(line.text)
+                .font(.display(16, weight: .heavy, for: line.text))
+                .lineSpacing(2)
+                .foregroundStyle(Theme.text)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 400, alignment: .trailing)
             if let note = line.note { NoteLabel(text: note, systemImage: "eye") }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    private var userBubble: some View {
-        HStack {
-            Spacer(minLength: 60)
-            Text(line.text)
-                .font(.system(size: 14.5))
-                .lineSpacing(2)
-                .foregroundStyle(Theme.text)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(
-                    LinearGradient(colors: [RGBA.hex(0x3A4FB8).color(0.55), RGBA.hex(0x5B3FD8).color(0.45)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: BubbleShape())
-                .overlay(BubbleShape().stroke(Color.white.opacity(0.1)))
-                .frame(maxWidth: 360, alignment: .trailing)
-        }
-    }
-
-    /// Plain text on the left, no avatar: alignment already says who's talking. Capped
-    /// at a comfortable reading width; the reply being spoken stays brightest.
     private var assistant: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
@@ -668,21 +663,19 @@ private struct MessageRow: View {
                 }
                 if let note = line.note { NoteLabel(text: note, systemImage: "wrench.and.screwdriver") }
                 if line.interrupted {
-                    Label("Interrupted", systemImage: "hand.raised.fill")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(Theme.secondary)
+                    Label("You cut in here", systemImage: "scissors")
+                        .font(.display(12, weight: .bold))
+                        .foregroundStyle(Theme.text)
                 }
                 if !line.text.isEmpty, !isLive {
                     actions
                         // Always on the latest reply so they're discoverable; on hover for the rest.
                         .opacity(hovering || isLast ? 1 : 0)
-                        .animation(.easeOut(duration: 0.15), value: hovering)
                 }
             }
-            .frame(maxWidth: 420, alignment: .leading)
+            .frame(maxWidth: 480, alignment: .leading)
             Spacer(minLength: 30)
         }
-        .padding(.leading, 4)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
     }
@@ -705,11 +698,8 @@ private struct MessageRow: View {
 
     private var error: some View {
         Label(line.text, systemImage: "exclamationmark.triangle.fill")
-            .font(.callout)
-            .foregroundStyle(RGBA.hex(0xFF9A9A).color())
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .font(.display(14, weight: .bold))
+            .foregroundStyle(Theme.acid)
     }
 }
 
@@ -730,13 +720,12 @@ private struct ReplyText: View {
     let interrupted: Bool
 
     var body: some View {
-        if text.isEmpty {
-            TypingDots()
-        } else {
-            (Text(text) + Text(isLive ? " ▍" : "").foregroundColor(Theme.accent))
-                .font(.system(size: 15))
-                .lineSpacing(5)
-                .foregroundStyle(Color.white.opacity(interrupted ? 0.5 : isLive ? 0.95 : 0.82))
+        if !text.isEmpty {
+            Text(text)
+                .font(.display(16, weight: .medium, for: text))
+                .lineSpacing(4)
+                .foregroundStyle(Theme.replyText)
+                .opacity(interrupted ? 0.82 : 1)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -761,15 +750,15 @@ private struct MessageAction: View {
             Task { try? await Task.sleep(for: .seconds(1.2)); done = false }
         } label: {
             Image(systemName: done ? doneImage ?? systemImage : systemImage)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(done ? Theme.accent : hovering ? Theme.text : Theme.tertiary)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(done ? Theme.acid : Theme.text)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 24, height: 22)
-                .background(hovering ? Theme.surface : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(hovering ? Theme.hover : .clear, in: Rectangle())
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.4)
+        .opacity(enabled ? 1 : 0.5)
         .onHover { hovering = $0 && enabled }
         .help(help)
     }
@@ -781,48 +770,18 @@ private struct NoteLabel: View {
 
     var body: some View {
         Label(text, systemImage: systemImage)
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(Theme.accent.opacity(0.8))
+            .font(.display(12, weight: .semibold))
+            .foregroundStyle(Theme.text)
             .lineLimit(2)
-    }
-}
-
-/// Rounded bubble with a tighter bottom-right corner, pointing at the speaker.
-private struct BubbleShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 6, topTrailingRadius: 18,
-            style: .continuous
-        ).path(in: rect)
-    }
-}
-
-private struct TypingDots: View {
-    @State private var onScreen = true
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !onScreen)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 5) {
-                ForEach(0..<3) { i in
-                    Circle()
-                        .fill(Theme.secondary)
-                        .frame(width: 6, height: 6)
-                        .opacity(0.35 + 0.65 * max(0, sin(t * 5 - Double(i) * 0.7)))
-                }
-            }
-            .frame(height: 20)
-        }
-        .onWindowVisibilityChange { onScreen = $0 }
     }
 }
 
 // MARK: - Composer
 
-/// Small icon toggle inside the composer; tinted with a soft backing while it's on.
+/// Small icon toggle in the typing row; a solid white square while it's on.
 private struct ComposerToggle: View {
     let systemImage: String
-    let tint: Color?
+    let isOn: Bool
     let help: String
     let action: () -> Void
     @State private var hovering = false
@@ -830,11 +789,11 @@ private struct ComposerToggle: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(tint ?? (hovering ? Theme.text : Theme.secondary))
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(isOn ? Mood.cherry.color() : Theme.text)
                 .frame(width: 28, height: 28)
-                .background((tint ?? .white).opacity(tint != nil ? 0.16 : hovering ? 0.07 : 0), in: Circle())
-                .contentShape(Circle())
+                .background(isOn ? Color.white : hovering ? Theme.hover : .clear, in: Rectangle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -856,6 +815,11 @@ enum SpaceKey {
                   !(event.window?.firstResponder is NSText),
                   event.window?.identifier?.rawValue.hasPrefix("main") == true
             else { return event }
+            // With Full Keyboard Access, Space belongs to whichever control has the focus.
+            if event.keyCode == 49, NSApp.isFullKeyboardAccessEnabled, let window = event.window,
+               window.firstResponder !== window, window.firstResponder !== window.contentView {
+                return event
+            }
             let session = VoiceSession.shared
             switch event.keyCode {
             case 49: if session.canToggle { session.toggle() }
@@ -872,10 +836,10 @@ enum SpaceKey {
 
 // MARK: - Dock
 
-/// Voice first: a big piece of the orb in the middle, with the voice waves flowing out of it.
-/// Typing is one click away on the keyboard button, and Esc folds it back into voice.
+/// No buttons to talk: the whole window does that. What's left is the small print, in words.
 private struct Dock: View {
     @Environment(VoiceSession.self) private var session
+    @AppStorage("chatOpen") private var chatOpen = false
     @ObservedObject private var shortcuts = Shortcuts.shared
     @FocusState private var focused: Bool
     @State private var typing = false
@@ -884,129 +848,89 @@ private struct Dock: View {
     private var hasDraft: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                if typing {
-                    typeBar
-                        .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.92)),
-                                                removal: .opacity.combined(with: .scale(scale: 0.96))))
-                } else {
-                    voiceRow
-                        .transition(.opacity.combined(with: .scale(scale: 1.04)))
-                }
-            }
-            .frame(minHeight: 76)
+        VStack(alignment: .leading, spacing: 6) {
+            if typing { typeBar } else { actions }
             Text(hint)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.tertiary)
+                .font(.display(12, weight: .semibold))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)
-                .animation(.easeOut(duration: 0.2), value: hint)
+                .allowsHitTesting(false)
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 2)
-        .padding(.bottom, 14)
-        .animation(.spring(duration: 0.4, bounce: 0.15), value: typing)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeOut(duration: 0.18), value: typing)
+        .animation(.easeOut(duration: 0.2), value: hint)
         .onChange(of: focused) { _, isFocused in
             // Clicking away from an empty field goes back to voice.
             if !isFocused && !hasDraft { typing = false }
         }
     }
 
-    // MARK: Voice
-
-    private var voiceRow: some View {
-        let mood = Mood.of(session.phase)
-        return HStack(spacing: 10) {
-            GlassButton(systemImage: "keyboard", tint: nil, help: "Type instead") { startTyping() }
-            waves.scaleEffect(x: -1) // mirrored, so both sides flow out of the orb
-            OrbButton(mood: mood, symbol: session.micOn ? "stop.fill" : "mic.fill", size: 68,
-                      live: session.micOn, levels: session.levels, enabled: session.canToggle,
-                      help: session.micOn ? "Stop (Space)" : "Start talking (Space)") { session.toggle() }
-            waves
+    private var actions: some View {
+        HStack(spacing: 18) {
+            TextAction(text: "Type", systemImage: "keyboard", help: "Type instead") { startTyping() }
+            if !chatOpen, !session.lines.isEmpty {
+                TextAction(text: "Conversation \u{00B7} \(session.lines.count)", help: "Show the whole conversation (C)") { chatOpen = true }
+            }
+            Spacer(minLength: 0)
             sideAction
         }
-        .frame(maxWidth: 480)
-        .animation(.easeInOut(duration: 0.8), value: session.phase)
     }
 
     /// The one control that matters right now: stop a reply, mute the mic, or mute spoken replies.
     @ViewBuilder private var sideAction: some View {
         if session.isReplying {
-            GlassButton(systemImage: "stop.fill", tint: nil, help: "Stop this reply (Esc)") { session.stopReply() }
+            TextAction(text: "Stop reply", systemImage: "stop.fill", help: "Stop this reply (Esc)") { session.stopReply() }
         } else if session.micOn {
-            GlassButton(
-                systemImage: session.micMuted ? "mic.slash.fill" : "mic.fill",
-                tint: session.micMuted ? RGBA.hex(0xFFB36B).color() : nil,
-                help: session.micMuted ? "Unmute the mic (M)" : "Mute the mic, keep the conversation going (M)"
-            ) { session.micMuted.toggle() }
+            TextAction(text: session.micMuted ? "Unmute mic" : "Mute mic",
+                       systemImage: session.micMuted ? "mic.slash.fill" : "mic.fill",
+                       help: session.micMuted ? "Unmute the mic (M)" : "Mute the mic, keep the conversation going (M)") {
+                session.micMuted.toggle()
+            }
         } else {
-            GlassButton(
-                systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                tint: session.muteReplies ? RGBA.hex(0xFFB3B3).color() : nil,
-                help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies"
-            ) { session.muteReplies.toggle() }
+            TextAction(text: session.muteReplies ? "Replies muted" : "Mute replies",
+                       systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                       help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies") {
+                session.muteReplies.toggle()
+            }
         }
-    }
-
-    private var waves: some View {
-        GlowWaves(phase: session.phase, levels: session.levels)
-            .frame(height: 44)
-            .frame(maxWidth: .infinity)
-            .opacity(session.isActive ? 1 : 0.3)
-            .animation(.easeOut(duration: 0.4), value: session.isActive)
     }
 
     // MARK: Typing
 
     private var typeBar: some View {
-        let mood = Mood.of(session.phase)
-        let shape = RoundedRectangle(cornerRadius: 25, style: .continuous)
-        return HStack(alignment: .bottom, spacing: 2) {
-            TextField("Type a message", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .lineLimit(1...5)
-                .focused($focused)
-                .onSubmit(send)
-                .onExitCommand(perform: stopTyping)
-                .padding(.leading, 14)
-                .padding(.trailing, 4)
-                .padding(.vertical, 12)
-            Group {
+        VStack(spacing: 0) {
+            HStack(alignment: .bottom, spacing: 6) {
+                TextField("", text: $draft, prompt: Text("Type something").foregroundStyle(Theme.text.opacity(0.8)), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.display(22))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1...4)
+                    .focused($focused)
+                    .onSubmit(send)
+                    .onExitCommand(perform: stopTyping)
                 ComposerToggle(
                     systemImage: session.attachScreenNext ? "eye.fill" : "eye",
-                    tint: session.attachScreenNext ? Theme.accent : nil,
+                    isOn: session.attachScreenNext,
                     help: session.attachScreenNext
                         ? "Your screen will be shared with the next message"
                         : "Share your screen with the next message (or just ask \u{201C}what's on my screen?\u{201D})"
                 ) { session.attachScreenNext.toggle() }
                 ComposerToggle(
                     systemImage: session.muteReplies ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                    tint: session.muteReplies ? RGBA.hex(0xFFB3B3).color() : nil,
+                    isOn: session.muteReplies,
                     help: session.muteReplies ? "Replies are text only. Click to hear them again." : "Mute spoken replies"
                 ) { session.muteReplies.toggle() }
+                TextAction(text: hasDraft ? "Send" : "Back", help: hasDraft ? "Send (Return)" : "Back to voice (Esc)") {
+                    hasDraft ? send() : stopTyping()
+                }
+                .disabled(hasDraft && !session.canToggle)
+                .padding(.leading, 8)
             }
             .padding(.bottom, 6)
-            // Send once there's something typed; otherwise straight back to talking.
-            OrbButton(mood: mood, symbol: hasDraft ? "arrow.up" : "waveform", size: 40,
-                      live: false, levels: session.levels, enabled: hasDraft ? session.canToggle : true,
-                      help: hasDraft ? "Send (Return)" : "Back to voice (Esc)") {
-                hasDraft ? send() : stopTyping()
-            }
-            .padding(.leading, 4)
+            Rectangle().fill(Theme.text).frame(height: 2)
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 5)
-        .padding(.vertical, 5)
-        .background {
-            shape.fill(LinearGradient(colors: [.white.opacity(0.085), .white.opacity(0.045)], startPoint: .top, endPoint: .bottom))
-                .overlay(shape.strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.16), mood.mid.color(0.4), .white.opacity(0.03)],
-                                   startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                .shadow(color: mood.mid.color(0.2), radius: 22, y: 4)
-                .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
-        }
-        .frame(maxWidth: 560)
     }
 
     private func startTyping() {
@@ -1026,104 +950,14 @@ private struct Dock: View {
     }
 
     private var hint: String {
-        if typing { return "Return to send  ·  Esc to go back to voice" }
+        if typing { return "Return to send  \u{00B7}  Esc to go back to voice" }
         if session.isReplying {
             if !session.micOn { return "Esc to stop the reply" }
-            return session.micMuted ? "Esc to stop the reply  ·  M to unmute" : "Esc or talk over me to stop the reply"
+            return session.micMuted ? "Esc to stop the reply  \u{00B7}  M to unmute" : "Talk over it to cut in  \u{00B7}  Esc to stop"
         }
-        if session.micMuted { return "Mic muted  ·  M to unmute" }
-        if session.micOn { return "Space to stop  ·  M to mute" }
-        return shortcuts.talk.map { "Space to talk  ·  \($0.display) from any app" } ?? "Space to talk"
-    }
-}
-
-/// The round buttons either side of the orb: the same frosted glass as the typing bar.
-private struct GlassButton: View {
-    let systemImage: String
-    let tint: Color?
-    let help: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint ?? (hovering ? Theme.text : Theme.secondary))
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 42, height: 42)
-                .background {
-                    Circle()
-                        .fill(tint.map { AnyShapeStyle($0.opacity(0.16)) } ?? AnyShapeStyle(
-                            LinearGradient(colors: [.white.opacity(hovering ? 0.12 : 0.08), .white.opacity(hovering ? 0.06 : 0.03)],
-                                           startPoint: .top, endPoint: .bottom)))
-                        .overlay(Circle().strokeBorder(
-                            LinearGradient(colors: [(tint ?? .white).opacity(0.3), (tint ?? .white).opacity(0.04)],
-                                           startPoint: .top, endPoint: .bottom), lineWidth: 1))
-                        .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
-                }
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help(help)
-        .animation(.easeOut(duration: 0.15), value: hovering)
-        .animation(.easeOut(duration: 0.15), value: tint != nil)
-    }
-}
-
-/// A piece of the orb: the same core-to-edge colours as the current mood, glowing, with
-/// rings that ride the audio while the mic is live.
-private struct OrbButton: View {
-    let mood: Mood
-    let symbol: String
-    let size: CGFloat
-    let live: Bool
-    let levels: AudioLevels
-    let enabled: Bool
-    let help: String
-    let action: () -> Void
-    @State private var hovering = false
-    @State private var onScreen = true
-
-    var body: some View {
-        Button(action: action) {
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !live || !onScreen)) { timeline in
-                let level = Double(max(levels.mic, levels.speaker))
-                let breath = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
-                ZStack {
-                    if live {
-                        Circle()
-                            .stroke(mood.mid.color(0.55 * (1 - breath)), lineWidth: 1.5)
-                            .scaleEffect(1 + breath * 0.5)
-                        Circle()
-                            .stroke(mood.core.color(0.5 + level * 0.5), lineWidth: 2)
-                            .scaleEffect(1.06 + level * 0.3)
-                            .opacity(0.3 + level * 0.7)
-                    }
-                    Circle()
-                        .fill(RadialGradient(colors: [mood.core.color(), mood.mid.color(), mood.edge.color()],
-                                             center: UnitPoint(x: 0.42, y: 0.36), startRadius: 0, endRadius: size * 0.75))
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.22), lineWidth: 0.75))
-                        .shadow(color: mood.mid.color(live ? 0.75 : hovering ? 0.6 : 0.45), radius: size * (live ? 0.4 : 0.28))
-                        .shadow(color: mood.edge.color(0.5), radius: 6, y: 3)
-                    Image(systemName: symbol)
-                        .font(.system(size: size * (symbol == "mic.fill" ? 0.36 : 0.32), weight: .bold))
-                        .foregroundStyle(mood.edge.mix(.hex(0x0A0B18), 0.45).color())
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .frame(width: size, height: size)
-                .scaleEffect(hovering ? 1.05 : 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .saturation(enabled ? 1 : 0)
-        .opacity(enabled ? 1 : 0.45)
-        .onHover { hovering = $0 && enabled }
-        .onWindowVisibilityChange { onScreen = $0 }
-        .help(help)
-        .animation(.spring(duration: 0.3, bounce: 0.3), value: hovering)
-        .animation(.easeOut(duration: 0.2), value: symbol)
+        if session.micMuted { return "Mic muted  \u{00B7}  M to unmute" }
+        if session.micOn { return "Click or Space to stop  \u{00B7}  M to mute" }
+        let start = session.lines.isEmpty ? "Space works too" : "Space to talk  \u{00B7}  drag the disc to rewind"
+        return shortcuts.talk.map { "\(start)  \u{00B7}  \($0.display) from any app" } ?? start
     }
 }

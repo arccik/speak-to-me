@@ -21,6 +21,10 @@ struct SpeakToMeApp: App {
             Task.detached { await SelfTest.run(model: model) }
             return
         }
+        if let flag = args.firstIndex(of: "--uidrive"), args.indices.contains(flag + 1) {
+            let dir = args[flag + 1]
+            Task { @MainActor in await UIDrive.run(to: dir) }
+        }
         if args.contains("--uibench") {
             Task { @MainActor in await UIBench.run() }
         }
@@ -32,7 +36,7 @@ struct SpeakToMeApp: App {
             Shortcuts.shared.install(.talk) {
                 guard session.canToggle else { return }
                 session.toggle()
-                // Working in another app? Show the floating orb so you can see it listening.
+                // Working in another app? Show the floating record so you can see it listening.
                 if UserDefaults.standard.object(forKey: "orbOnHotKey") as? Bool ?? true,
                    !NSApp.isActive || !AppActions.mainWindowVisible {
                     MiniOrbController.shared.show(session: session)
@@ -76,7 +80,7 @@ private struct MenuBarIcon: View {
     @Environment(VoiceSession.self) private var session
 
     var body: some View {
-        Image(systemName: session.isActive ? "waveform.circle.fill" : "waveform.circle")
+        Image(systemName: session.isActive ? "record.circle.fill" : "record.circle")
     }
 }
 
@@ -90,7 +94,7 @@ private struct MenuBarContent: View {
         if let talk = shortcuts.talk { Text("\(talk.display) toggles from any app") }
         Divider()
         Button("Show Window") { AppActions.showMainWindow() }
-        Button(MiniOrbController.shared.isVisible ? "Hide Floating Orb" : "Show Floating Orb") {
+        Button(MiniOrbController.shared.isVisible ? "Hide Floating Record" : "Show Floating Record") {
             MiniOrbController.shared.toggle(session: session)
         }
         Divider()

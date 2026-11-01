@@ -6,6 +6,8 @@ struct SentenceChunker {
     private var buffer = ""
     private var insideThink = false
     private var emittedAny = false
+    /// `<prosody>` tags still open, handed on to the next sentence.
+    private var openProsody: [String] = []
 
     /// Feed a token; returns any pieces that are now complete.
     mutating func push(_ token: String) -> [String] {
@@ -15,7 +17,7 @@ struct SentenceChunker {
         while let cut = nextBoundary() {
             let piece = String(buffer[..<cut])
             buffer.removeSubrange(..<cut)
-            if let spoken = Self.speakable(piece) {
+            if let spoken = carried(piece) {
                 pieces.append(spoken)
                 emittedAny = true
             }
@@ -27,7 +29,15 @@ struct SentenceChunker {
     mutating func finish() -> [String] {
         stripThinking()
         defer { buffer = "" }
-        return insideThink ? [] : Self.speakable(buffer).map { [$0] } ?? []
+        return insideThink ? [] : carried(buffer).map { [$0] } ?? []
+    }
+
+    /// A piece ready to speak, in the prosody it's inside. Nil if it's only tags that say nothing.
+    private mutating func carried(_ piece: String) -> String? {
+        let prefix = openProsody.joined()
+        SSML.track(piece, open: &openProsody)
+        guard let spoken = Self.speakable(piece) else { return nil }
+        return SSML.hasMarkup(spoken) && SSML.segments(of: spoken).isEmpty ? nil : prefix + spoken
     }
 
     private func nextBoundary() -> String.Index? {
@@ -36,6 +46,12 @@ struct SentenceChunker {
         var count = 0
         while index < buffer.endIndex {
             let char = buffer[index]
+            // Never cut inside a tag, and wait for one that's still arriving.
+            if char == "<", SSML.isTagStart(buffer[index...]) {
+                guard let close = buffer[index...].firstIndex(of: ">") else { return nil }
+                index = buffer.index(after: close)
+                continue
+            }
             let next = buffer.index(after: index)
             count += 1
             if char == "\n" { return next }

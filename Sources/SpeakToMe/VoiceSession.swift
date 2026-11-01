@@ -95,6 +95,8 @@ final class VoiceSession {
     var f5Steps = StoredSetting.value("f5Steps", default: 8) { didSet { StoredSetting.store(f5Steps, "f5Steps") } }
     /// F5-TTS Russian: mark word stress first, as it was trained to read.
     var f5MarksStress = StoredSetting.value("f5MarksStress", default: true) { didSet { StoredSetting.store(f5MarksStress, "f5MarksStress") } }
+    /// The model may use SSML for pauses, speed and pitch, and we perform it. Off, any tags are just dropped.
+    var expressiveVoice = StoredSetting.value("expressiveVoice", default: false) { didSet { StoredSetting.store(expressiveVoice, "expressiveVoice") } }
     var myVoiceStatus: String?
     private(set) var myVoiceBusy = false
     /// The language of the conversation so far; sticks when a message is too short to tell.
@@ -123,8 +125,15 @@ final class VoiceSession {
         Never use markdown, lists, headings, code blocks or emoji: everything you write is read aloud.
         """
 
+    static let expressivePrompt = """
+         You can shape how your voice sounds with exactly these tags: <break time="500ms"/> for a pause, and \
+        <prosody rate="slow" pitch="-2st">words</prosody> for speed (slow or fast) and pitch (from -4st to +4st). \
+        Use them only where they add feeling, usually not at all in a short plain answer, and never mention them.
+        """
+
     private var fullSystemPrompt: String {
         var prompt = systemPrompt
+        if expressiveVoice { prompt += Self.expressivePrompt }
         if useTools {
             prompt += " You can search the web, read pages, check the time and open apps or web pages with your tools; use them whenever they help, and summarise results briefly in speech."
         }
@@ -335,7 +344,7 @@ final class VoiceSession {
     private var speechSetup: SpeechSetup {
         SpeechSetup(
             engines: speechEngines, voice: voice, languageVoice: languageVoice, speed: Float(speed),
-            clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil, f5Steps: f5Steps, f5MarksStress: f5MarksStress,
+            expressive: expressiveVoice, clonedVoice: hasMyVoice ? Self.myVoiceFile.path : nil, f5Steps: f5Steps, f5MarksStress: f5MarksStress,
             f5Voice: selectedF5Voice, f5Pronunciations: f5Pronunciations)
     }
 
@@ -652,7 +661,7 @@ final class VoiceSession {
         turn.task = Task {
             var chunker = SentenceChunker()
             for sentence in chunker.push(text) + chunker.finish() {
-                let sentenceLanguage = matchLanguage ? LanguageDetector.detect(sentence) ?? turnLanguage : "en"
+                let sentenceLanguage = matchLanguage ? LanguageDetector.detect(SSML.plain(sentence)) ?? turnLanguage : "en"
                 guard let samples = try? await speech.speak(sentence, language: sentenceLanguage, using: setup),
                       !Task.isCancelled
                 else { if Task.isCancelled { return } else { continue } }
@@ -698,9 +707,14 @@ final class VoiceSession {
         saveConversation()
         conversationID = conversation.id
         conversationCreated = conversation.created
-        lines = conversation.lines
+        // Older saves can hold SSML the model wrote; showing it, or sending it back, only encourages it.
+        lines = conversation.lines.map { line in
+            var line = line
+            if line.role == "assistant" { line.text = SentenceChunker.visible(line.text) }
+            return line
+        }
         // The model only needs the spoken exchange, not error notes.
-        history = conversation.lines
+        history = lines
             .filter { $0.role == "user" || $0.role == "assistant" }
             .map { OMLXClient.Message(role: $0.role, content: $0.text) }
         // At launch this runs while models load; don't clobber that status.
@@ -996,7 +1010,7 @@ final class VoiceSession {
             for await sentence in sentences {
                 if muted { continue }
                 // Per-sentence detection catches a reply that switches language; short ones follow the turn.
-                let sentenceLanguage = LanguageDetector.detect(sentence) ?? turnLanguage
+                let sentenceLanguage = LanguageDetector.detect(SSML.plain(sentence)) ?? turnLanguage
                 guard let samples = try? await speech.speak(
                         sentence, language: matchLanguage ? sentenceLanguage : "en", using: setup),
                       !Task.isCancelled
@@ -1032,7 +1046,7 @@ final class VoiceSession {
                    turnLanguage == "en" || !matchLanguage {
                     sentenceSink.yield(filler)
                 }
-                messages.append(.init(role: "assistant", content: roundText, toolCalls: calls))
+                messages.append(.init(role: "assistant", content: SentenceChunker.visible(roundText), toolCalls: calls))
                 for call in calls {
                     // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
                     while Tools.hasSideEffects(call) && !turn.committed {
@@ -1170,12 +1184,12 @@ private final class Turn {
 }
 
 extension SentenceChunker {
-    /// The reply as shown on screen: thinking removed, otherwise untouched.
+    /// The reply as shown on screen: thinking and SSML removed, otherwise untouched.
     static func visible(_ text: String) -> String {
-        guard text.contains("<think>") else { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
-        var s = text.replacingOccurrences(of: #"<think>[\s\S]*?(</think>|$)"#, with: "", options: .regularExpression)
-        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        return s
+        let s = text.contains("<think>")
+            ? text.replacingOccurrences(of: #"<think>[\s\S]*?(</think>|$)"#, with: "", options: .regularExpression)
+            : text
+        return SSML.plain(s).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

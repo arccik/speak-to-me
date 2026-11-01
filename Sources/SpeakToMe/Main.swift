@@ -41,6 +41,12 @@ enum Main {
             Task.detached { await SelfTest.replyTiming(model: model, engine: engine) }
             dispatchMain()
         }
+        if args.contains("--ssmltest") {
+            let flag = args.firstIndex(of: "--ssmltest")! + 1
+            let model = args.indices.contains(flag) ? args[flag] : nil
+            Task.detached { await SelfTest.ssml(model: model) }
+            dispatchMain()
+        }
         if args.contains("--f5switchtest") {
             Task { @MainActor in await SelfTest.f5Switching() }
             dispatchMain()

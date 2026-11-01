@@ -1,0 +1,25 @@
+<!doctype html><meta charset=utf-8><title>The Cutting Lathe</title>
+<style>html,body{margin:0;height:100%;background:#E5102B;overflow:hidden;font-family:-apple-system,system-ui;color:#fff}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+.w{position:fixed;left:28px;right:28px;bottom:30px;font-size:34px;line-height:1.08;font-weight:800;letter-spacing:-.02em}
+.s{position:fixed;left:28px;top:26px;font-size:24px;font-weight:800;letter-spacing:-.01em}</style>
+<canvas id=c></canvas><div class=s id=s>Listening</div><div class=w id=w>And how long does it take to climb</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');let W,H;
+function R(){W=c.width=innerWidth*devicePixelRatio;H=c.height=innerHeight*devicePixelRatio}R();onresize=R;
+const turns=[[.95,'#fff'],[.8,'#F4FF3A'],[.66,'#fff'],[.5,'#F4FF3A']];
+function draw(t){x.fillStyle='#E5102B';x.fillRect(0,0,W,H);
+ const cx=W*.5,cy=H*.46,M=Math.max(W,H)*.62,rot=t*.25;
+ const v=.35+.65*Math.abs(Math.sin(t*2.1)*Math.sin(t*.7+1));
+ for(let g=0;g<46;g++){const f=.26+g/46*.86,r=f*M;
+  const cut=g<8,col=g%11==3?'#F4FF3A':cut?'#fff':'rgba(90,0,14,.55)';
+  x.beginPath();for(let i=0;i<=360;i++){const a=i/360*6.283+rot;
+   const amp=(cut?v*14:1.6+(g%5)*1.1)*devicePixelRatio;
+   const d=Math.sin(a*(40+g%7*9)+t*(cut?9:0))*amp*Math.sin(a*3+g)**2;
+   const X=cx+Math.cos(a)*(r+d),Y=cy+Math.sin(a)*(r+d);i?x.lineTo(X,Y):x.moveTo(X,Y)}
+  x.strokeStyle=col;x.lineWidth=(cut?2.2:1.1)*devicePixelRatio;x.stroke()}
+ x.fillStyle='#1420FF';x.beginPath();x.arc(cx,cy,.21*M,0,7);x.fill();
+ x.fillStyle='#F4FF3A';x.beginPath();x.arc(cx,cy,.018*M,0,7);x.fill();
+ requestAnimationFrame(n=>draw(n/1000))}
+draw(0);
+</script>

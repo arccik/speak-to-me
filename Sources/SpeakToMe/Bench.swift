@@ -52,6 +52,131 @@ enum UIBench {
     }
 }
 
+/// `SpeakToMe --uidrive <dir> -chatOpen NO` plays through a voice turn in the normal window and
+/// saves a picture of each moment: clicks it to start and stop, feeds made-up levels for your
+/// voice and the reply, cuts in, and scratches the disc. Silent, and no real audio is involved, so
+/// it can't reach another copy of the app. Events go straight to this app's window, never to
+/// the rest of the screen.
+@MainActor
+enum UIDrive {
+    private static var directory = ""
+
+    static func run(to path: String) async {
+        directory = path
+        let session = VoiceSession.shared
+        for _ in 0..<300 where session.phase != .ready { try? await Task.sleep(for: .milliseconds(200)) }
+        report("booted")
+        guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) else {
+            print("DRIVE no window"); exit(1)
+        }
+        window.orderFrontRegardless() // a covered window pauses itself; this doesn't take the keyboard
+        session.beginTestConversation(lines: [
+            .init(role: "user", text: "What's the tallest mountain in Europe?"),
+            .init(role: "assistant", text: "That's Mount Elbrus in the Caucasus, at about 5,642 metres."),
+            .init(role: "user", text: "Have people skied down it?"),
+            .init(role: "assistant", text: "Yes, plenty! There's a ski resort on its southern slopes."),
+        ])
+        try? await Task.sleep(for: .seconds(1.5))
+        capture(window, "1-stage")
+
+        click(window)
+        for _ in 0..<100 where !session.micOn { try? await Task.sleep(for: .milliseconds(100)) }
+        report("clicked to start")
+        click(window)
+        for _ in 0..<100 where session.micOn { try? await Task.sleep(for: .milliseconds(100)) }
+        report("clicked to stop")
+
+        session.liveText = "And how long does it take to climb"
+        await play(.hearing, seconds: 7) { session.levels.mic = $0 }
+        capture(window, "2-hearing")
+        report("fed your voice")
+        session.liveText = nil
+        session.levels.mic = 0
+
+        session.lines.append(.init(role: "user", text: "And how long does it take to climb?"))
+        session.phase = .thinking
+        try? await Task.sleep(for: .seconds(1.2))
+        capture(window, "3-thinking")
+
+        session.lines.append(.init(role: "assistant", text: "Most people take about a week, to give the body time to adjust to the"))
+        await play(.speaking, seconds: 7) { session.levels.speaker = $0 }
+        capture(window, "4-speaking")
+        report("fed the reply")
+
+        session.lines[session.lines.count - 1].interrupted = true
+        try? await Task.sleep(for: .milliseconds(180))
+        capture(window, "5-cut-in")
+        print("DRIVE cut in front=\(LatheEngine.shared.front) strength=\(LatheEngine.shared.frontStrength)")
+        session.levels.speaker = 0
+        session.phase = .ready
+        try? await Task.sleep(for: .seconds(1.5))
+
+        let center = NSPoint(x: window.contentLayoutRect.midX, y: window.contentLayoutRect.height * 0.54)
+        drag(window, around: center, phase: .leftMouseDown, angle: 0)
+        for step in 1...40 {
+            drag(window, around: center, phase: .leftMouseDragged, angle: Double(step) * 0.12) // anti-clockwise goes back
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        print("DRIVE scratched scrub=\(LatheEngine.shared.scrub) line=\(String(describing: LatheEngine.shared.lineAtHead))")
+        try? await Task.sleep(for: .milliseconds(300))
+        capture(window, "6-scratching")
+        drag(window, around: center, phase: .leftMouseUp, angle: 40 * 0.12)
+        try? await Task.sleep(for: .seconds(2))
+        print("DRIVE released scrub=\(LatheEngine.shared.scrub)")
+
+        try? await Task.sleep(for: .seconds(5))
+        let before = UIBench.cpuMilliseconds()
+        try? await Task.sleep(for: .seconds(5))
+        print("DRIVE idle cpu_pct=\(Double(UIBench.cpuMilliseconds() - before) / 50)")
+
+        session.deleteConversationForTest()
+        exit(0)
+    }
+
+    /// Holds a phase with syllable-shaped levels coming in, like someone talking.
+    private static func play(_ phase: VoiceSession.Phase, seconds: Double, feed: (Float) -> Void) async {
+        VoiceSession.shared.phase = phase
+        let start = Date()
+        while Date().timeIntervalSince(start) < seconds {
+            let t = Date().timeIntervalSince(start)
+            feed(Float(0.2 + 0.6 * max(0, sin(t * 12.6) * sin(t * 2.7 + 1))))
+            try? await Task.sleep(for: .milliseconds(30))
+        }
+    }
+
+    private static func report(_ what: String) {
+        let session = VoiceSession.shared
+        print("DRIVE \(what): phase=\(session.phase) micOn=\(session.micOn) lines=\(session.lines.count) turn=\(LatheEngine.shared.turn) mic=\(session.levels.mic)")
+        fflush(stdout)
+    }
+
+    private static func click(_ window: NSWindow) {
+        let point = NSPoint(x: window.contentLayoutRect.midX - 120, y: window.contentLayoutRect.height * 0.4)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            send(window, type, at: point)
+        }
+    }
+
+    private static func drag(_ window: NSWindow, around center: NSPoint, phase: NSEvent.EventType, angle: Double) {
+        send(window, phase, at: NSPoint(x: center.x + cos(angle) * 180, y: center.y + sin(angle) * 180))
+    }
+
+    private static func send(_ window: NSWindow, _ type: NSEvent.EventType, at point: NSPoint) {
+        guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                             clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
+        else { return }
+        window.sendEvent(event)
+    }
+
+    private static func capture(_ window: NSWindow, _ name: String) {
+        let shot = Process()
+        shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        shot.arguments = ["-x", "-o", "-l", "\(window.windowNumber)", "\(directory)/\(name).png"]
+        try? shot.run()
+    }
+}
+
 /// Ticks on the main queue 120 times a second and records how late each tick fires,
 /// which is how long the main thread was busy with something else.
 final class StallMonitor: @unchecked Sendable {
