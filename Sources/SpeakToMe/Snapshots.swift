@@ -92,7 +92,8 @@ enum Snapshots {
         session.showF5VoiceForSnapshot(.init(id: "sample", name: "Recording 1", transcript: VoiceSession.f5VoiceScript))
         let panes = SettingsView.Pane.allCases
         let original = UserDefaults.standard.string(forKey: "settingsPane")
-        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 720, height: 560),
+        SettingsView.height = 1050
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 720, height: 1050),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)
 

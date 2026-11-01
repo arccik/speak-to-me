@@ -3,16 +3,17 @@ import SwiftUI
 /// Settings as a sidebar of panes, in the style of System Settings.
 struct SettingsView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case general, shortcuts, voice, conversation, model
+        case general, shortcuts, voice, cloning, conversation, model
 
         var id: Self { self }
-        var title: String { rawValue.capitalized }
+        var title: String { self == .cloning ? "Voice Cloning" : rawValue.capitalized }
 
         var subtitle: String {
             switch self {
             case .general: return "Sounds, the floating orb and your history"
             case .shortcuts: return "Talk or bring up the orb from any app"
-            case .voice: return "How replies sound"
+            case .voice: return "Which model speaks each language, and how"
+            case .cloning: return "Hear replies in a voice you record"
             case .conversation: return "Turn-taking, personality and tools"
             case .model: return "The language model in oMLX"
             }
@@ -23,6 +24,7 @@ struct SettingsView: View {
             case .general: return "gearshape.fill"
             case .shortcuts: return "command"
             case .voice: return "waveform"
+            case .cloning: return "person.wave.2.fill"
             case .conversation: return "bubble.left.and.bubble.right.fill"
             case .model: return "cpu.fill"
             }
@@ -33,11 +35,15 @@ struct SettingsView: View {
             case .general: return Color(white: 0.5)
             case .shortcuts: return RGBA.hex(0x3FA6FF).color()
             case .voice: return RGBA.hex(0x8E62F7).color()
+            case .cloning: return RGBA.hex(0xE0569B).color()
             case .conversation: return RGBA.hex(0x2CC4A6).color()
             case .model: return RGBA.hex(0xF08A3C).color()
             }
         }
     }
+
+    /// Taller for Snapshots, so a whole pane fits in the picture.
+    static var height: CGFloat = 560
 
     @AppStorage("settingsPane") private var pane: Pane = .general
 
@@ -59,6 +65,7 @@ struct SettingsView: View {
                 case .general: GeneralPane()
                 case .shortcuts: ShortcutsPane()
                 case .voice: VoicePane()
+                case .cloning: VoiceCloningPane()
                 case .conversation: ConversationPane()
                 case .model: ModelPane()
                 }
@@ -66,7 +73,7 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .navigationTitle(pane.title)
         }
-        .frame(width: 720, height: 560)
+        .frame(width: 720, height: Self.height)
         .tint(Theme.violet)
     }
 }
@@ -90,20 +97,19 @@ private struct IconTile: View {
     }
 }
 
-/// Big icon, title and one line of explanation at the top of each pane.
+/// Icon, title and one line of explanation at the top of each pane.
 private struct PaneHeader: View {
     let pane: SettingsView.Pane
 
     var body: some View {
         Section {
             HStack(spacing: 14) {
-                IconTile(systemImage: pane.icon, color: pane.color, size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(pane.title).font(.title2.weight(.semibold))
+                IconTile(systemImage: pane.icon, color: pane.color, size: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(pane.title).font(.headline)
                     Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 }
@@ -267,7 +273,33 @@ private struct KeyRow: View {
 private struct VoicePane: View {
     @Environment(VoiceSession.self) private var session
 
-    /// Preview lines for the non-English models, in the conversation's language where possible.
+    var body: some View {
+        @Bindable var session = session
+        Form {
+            PaneHeader(pane: .voice)
+            ForEach(SpeechSlot.allCases) { LanguageSection(slot: $0) }
+            Section {
+                LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
+                              low: "Slower", high: "Faster") { String(format: "%.2f×", Double($0)) }
+                Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
+                LabeledContent("Current language", value: LanguageDetector.name(session.language))
+            } header: {
+                Text("Playback")
+            } footer: {
+                Footer("Model changes apply from the next reply. If a model can't speak a sentence, the next available one does.")
+            }
+        }
+    }
+}
+
+/// One language group: which model speaks it, in which voice.
+private struct LanguageSection: View {
+    @Environment(VoiceSession.self) private var session
+    @AppStorage("settingsPane") private var pane: SettingsView.Pane = .voice
+    @State private var showsF5Options = false
+    let slot: SpeechSlot
+
+    /// Preview lines, in the conversation's language where possible.
     private static let previews = [
         "en": "Hi! This is how I'll sound when we talk.",
         "ru": "Привет! Вот так я буду звучать, когда мы говорим по-русски.",
@@ -278,23 +310,7 @@ private struct VoicePane: View {
         "es": "¡Hola! Así sonaré cuando hablemos en español.",
     ]
 
-    /// Voices grouped like "American female", in the order they're listed.
-    private var groups: [(String, [String])] {
-        var order: [String] = []
-        var byGroup: [String: [String]] = [:]
-        for id in VoiceSession.voices {
-            let group = VoiceSession.voiceName(id).components(separatedBy: " · ").last ?? ""
-            if byGroup[group] == nil { order.append(group) }
-            byGroup[group, default: []].append(id)
-        }
-        return order.map { ($0, byGroup[$0]!) }
-    }
-
-    private func preview(for slot: SpeechSlot) -> String {
-        Self.previews[language(of: slot)] ?? Self.previews["pl"]!
-    }
-
-    private func language(of slot: SpeechSlot) -> String {
+    private var language: String {
         switch slot {
         case .english: return "en"
         case .russian: return "ru"
@@ -302,18 +318,13 @@ private struct VoicePane: View {
         }
     }
 
-    private func binding(for slot: SpeechSlot) -> Binding<SpeechEngine> {
-        Binding(
-            get: { session.speechEngines[slot] ?? slot.engines[0] },
-            set: { session.setEngine($0, for: slot) })
-    }
+    private var engine: SpeechEngine { session.speechEngines[slot] ?? slot.engines[0] }
 
-    private func speechModelRow(_ slot: SpeechSlot) -> some View {
-        let engine = session.speechEngines[slot] ?? slot.engines[0]
-        return VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(slot.title) {
+    var body: some View {
+        Section {
+            LabeledContent("Model") {
                 HStack(spacing: 8) {
-                    Picker(slot.title, selection: binding(for: slot)) {
+                    Picker("Model", selection: Binding(get: { engine }, set: { session.setEngine($0, for: slot) })) {
                         ForEach(slot.engines) { option in
                             Text(option.name)
                                 .tag(option)
@@ -323,151 +334,146 @@ private struct VoicePane: View {
                     .labelsHidden()
                     .fixedSize()
                     Button {
-                        session.readAloud(preview(for: slot))
+                        session.readAloud(Self.previews[language] ?? Self.previews["pl"]!)
                     } label: {
                         Label("Preview", systemImage: "play.fill")
                     }
                     .disabled(!session.canToggle || (slot != .english && !session.matchLanguage))
-                    .help("Hear this model")
+                    .help(slot != .english && !session.matchLanguage
+                        ? "Turn on \"Answer in the language I speak\" to hear this" : "Hear this model")
                 }
             }
-            SpeechModelStatus(engine: engine, language: language(of: slot))
+            if session.state(of: engine) != .ready {
+                SpeechModelStatus(engine: engine)
+            }
+            voiceRow
+            if engine == .f5Russian {
+                DisclosureGroup("F5-TTS options", isExpanded: $showsF5Options) { F5Options() }
+            }
+        } header: {
+            Text(slot.title)
+        } footer: {
+            Footer(engine.summary)
         }
     }
 
-    var body: some View {
+    @ViewBuilder private var voiceRow: some View {
         @Bindable var session = session
-        Form {
-            PaneHeader(pane: .voice)
-            Section {
-                ForEach(SpeechSlot.allCases) { speechModelRow($0) }
-            } header: {
-                Text("Speech models")
-            } footer: {
-                Footer("Applies from the next reply. If a model can't speak a sentence, the next available one does. Supertonic-3 covers 31 languages; macOS voices can be improved in System Settings → Accessibility → Spoken Content. F5-TTS Russian sounds the most natural but takes a second or two per sentence and about 3 GB of memory while it's chosen; for non-commercial use.")
+        switch engine {
+        case .kokoro:
+            Picker("Voice", selection: $session.voice) {
+                ForEach(kokoroGroups, id: \.0) { group, ids in
+                    Section(group.capitalized) {
+                        ForEach(ids, id: \.self) {
+                            Text(VoiceSession.voiceName($0).components(separatedBy: " · ").first ?? $0).tag($0)
+                        }
+                    }
+                }
             }
-            Section {
-                if session.speechEngines[.english] == .kokoro {
-                    Picker("Kokoro voice", selection: $session.voice) {
-                        ForEach(groups, id: \.0) { group, ids in
-                            Section(group.capitalized) {
-                                ForEach(ids, id: \.self) {
-                                    Text(VoiceSession.voiceName($0).components(separatedBy: " · ").first ?? $0).tag($0)
-                                }
+        case .myVoice:
+            LabeledContent("Voice", value: session.hasMyVoice ? "Your recording" : "Not recorded yet")
+        case .supertonic:
+            Picker("Voice", selection: $session.languageVoice) { builtInVoices }
+        case .f5Russian:
+            LabeledContent("Voice") {
+                HStack(spacing: 8) {
+                    Picker("Voice", selection: f5Voice) {
+                        Section("Built-in") {
+                            ForEach(MultilingualVoices.voices, id: \.self) { Text(Self.voiceLabel($0)).tag("builtin:\($0)") }
+                        }
+                        if !session.f5Voices.isEmpty {
+                            Section("Cloned") {
+                                ForEach(session.f5Voices) { Text($0.name).tag($0.id) }
                             }
                         }
                     }
+                    .labelsHidden()
+                    .fixedSize()
+                    Button("Clone a Voice…") { pane = .cloning }
                 }
-                if session.speechEngines[.russian] != .macOS || session.speechEngines[.other] == .supertonic {
-                    Picker("Voice for other languages", selection: $session.languageVoice) {
-                        ForEach(MultilingualVoices.voices, id: \.self) { id in
-                            Text("\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())").tag(id)
-                        }
-                    }
+            }
+        case .macOS:
+            if let voice = SystemVoice.bestVoice(for: language) {
+                LabeledContent("Voice", value: voice.name)
+            } else {
+                LabeledContent("Voice") {
+                    Label("None installed for \(LanguageDetector.name(language))", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
                 }
-                LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
-                              low: "Slower", high: "Faster") { String(format: "%.2f×", Double($0)) }
             }
-            Section {
-                Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
-                LabeledContent("Current language", value: LanguageDetector.name(session.language))
-            } header: {
-                Text("Language")
-            }
-            if session.speechEngines[.russian] == .f5Russian { F5Section() }
-            MyVoiceSection()
         }
+    }
+
+    @ViewBuilder private var builtInVoices: some View {
+        ForEach(MultilingualVoices.voices, id: \.self) { Text(Self.voiceLabel($0)).tag($0) }
+    }
+
+    private static func voiceLabel(_ id: String) -> String {
+        "\(id.hasPrefix("M") ? "Male" : "Female") \(id.dropFirst())"
+    }
+
+    /// Built-in and cloned voices in one menu, though they're stored apart.
+    private var f5Voice: Binding<String> {
+        Binding(
+            get: { session.selectedF5Voice?.id ?? "builtin:\(session.languageVoice)" },
+            set: { choice in
+                if choice.hasPrefix("builtin:") {
+                    session.languageVoice = String(choice.dropFirst("builtin:".count))
+                    session.f5VoiceID = ""
+                } else {
+                    session.f5VoiceID = choice
+                }
+            })
+    }
+
+    /// Kokoro's voices grouped like "American female", in the order they're listed.
+    private var kokoroGroups: [(String, [String])] {
+        var order: [String] = []
+        var byGroup: [String: [String]] = [:]
+        for id in VoiceSession.voices {
+            let group = VoiceSession.voiceName(id).components(separatedBy: " · ").last ?? ""
+            if byGroup[group] == nil { order.append(group) }
+            byGroup[group, default: []].append(id)
+        }
+        return order.map { ($0, byGroup[$0]!) }
     }
 }
 
-/// F5-TTS Russian: whose voice it imitates, its quality, and how it stresses words.
-private struct F5Section: View {
+/// F5-TTS's quality, and how it stresses words.
+private struct F5Options: View {
     @Environment(VoiceSession.self) private var session
     @State private var newPronunciation = ""
 
     var body: some View {
         @Bindable var session = session
-        Section {
-            Picker("Voice", selection: $session.f5VoiceID) {
-                Text("Voice for other languages (above)").tag("")
-                ForEach(session.f5Voices) { Text($0.name).tag($0.id) }
-            }
-            if let voice = session.selectedF5Voice {
-                TextField("Name", text: Binding(
-                    get: { voice.name }, set: { session.updateF5Voice(voice.id, name: $0) }))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("What's said in the clip")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    TextField("What's said in the clip", text: Binding(
-                        get: { voice.transcript }, set: { session.updateF5Voice(voice.id, transcript: $0) }),
-                        axis: .vertical)
+        Picker("Quality", selection: $session.f5Steps) {
+            Text("Fastest").tag(8)
+            Text("Balanced").tag(12)
+            Text("Best").tag(16)
+        }
+        Toggle("Mark word stress (RUAccent dictionary)", isOn: $session.f5MarksStress)
+        if session.f5MarksStress {
+            LabeledContent {
+                HStack {
+                    TextField("зам+ок", text: $newPronunciation)
                         .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 140)
+                        .onSubmit(addPronunciation)
+                    Button("Add", action: addPronunciation)
+                        .disabled(!newPronunciation.contains("+"))
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fix a word")
+                    Text("Put + before the stressed vowel").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("To record, read this aloud")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(VoiceSession.f5VoiceScript)
-                    .font(.callout)
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            HStack {
-                Button {
-                    Task { await session.recordF5Voice() }
-                } label: {
-                    Label("Record (8 s)", systemImage: "record.circle")
-                }
-                Button("Use an Audio File…") {
-                    let panel = NSOpenPanel()
-                    panel.allowedContentTypes = [.audio]
-                    if panel.runModal() == .OK, let url = panel.url {
-                        Task { await session.importF5Voice(from: url) }
-                    }
-                }
-                Spacer()
-                if let voice = session.selectedF5Voice {
-                    Button("Delete", role: .destructive) { session.deleteF5Voice(voice.id) }
+            ForEach(session.f5Pronunciations.keys.sorted(), id: \.self) { word in
+                LabeledContent(session.f5Pronunciations[word] ?? word) {
+                    Button("Remove") { session.removePronunciation(word) }
                 }
             }
-            .disabled(session.f5VoiceBusy)
-            if let status = session.f5VoiceStatus {
-                HStack(spacing: 6) {
-                    if session.f5VoiceBusy { ProgressView().controlSize(.small) }
-                    Text(status).font(.callout)
-                }
-            }
-            Picker("Quality", selection: $session.f5Steps) {
-                Text("Fastest").tag(8)
-                Text("Balanced").tag(12)
-                Text("Best").tag(16)
-            }
-            Toggle("Mark word stress (RUAccent dictionary)", isOn: $session.f5MarksStress)
-            if session.f5MarksStress {
-                LabeledContent("Fix a word") {
-                    HStack {
-                        TextField("зам+ок", text: $newPronunciation)
-                            .labelsHidden()
-                            .frame(width: 140)
-                            .onSubmit(addPronunciation)
-                        Button("Add", action: addPronunciation)
-                            .disabled(!newPronunciation.contains("+"))
-                    }
-                }
-                ForEach(session.f5Pronunciations.keys.sorted(), id: \.self) { word in
-                    LabeledContent(session.f5Pronunciations[word] ?? word) {
-                        Button("Remove") { session.removePronunciation(word) }
-                    }
-                }
-            }
-        } header: {
-            Text("F5-TTS Russian")
-        } footer: {
-            Footer("A clear clip of one person works best, up to 8 seconds is used, and the words must match what's said. Only clone a voice you have permission to use. To fix a word, put + before its stressed vowel. Everything stays on this Mac.")
         }
     }
 
@@ -477,99 +483,201 @@ private struct F5Section: View {
     }
 }
 
-/// One line under a speech model: whether it's ready, downloading or failed.
+/// Shown under a speech model only while it's busy or something's wrong.
 private struct SpeechModelStatus: View {
     @Environment(VoiceSession.self) private var session
     let engine: SpeechEngine
-    let language: String
-
-    private var systemVoiceStatus: String {
-        guard let voice = SystemVoice.bestVoice(for: language) else {
-            return "No \(LanguageDetector.name(language)) voice installed. Add one in System Settings → Accessibility → Spoken Content."
-        }
-        return "Ready: \(voice.name)"
-    }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             switch session.state(of: engine) {
             case .loading:
+                Spacer()
                 ProgressView().controlSize(.small)
                 Text("Loading…")
             case .downloading(let fraction):
-                ProgressView(value: fraction).frame(width: 90).controlSize(.small)
-                Text("Downloading \(engine.downloadSize ?? "")… \(Int(fraction * 100))%")
-                    .monospacedDigit()
+                Text("Downloading \(engine.downloadSize ?? "")")
+                Spacer()
+                ProgressView(value: fraction).frame(width: 120).controlSize(.small)
+                Text("\(Int(fraction * 100))%").monospacedDigit().frame(width: 34, alignment: .trailing)
             case .notDownloaded:
-                Text("Downloads when first used (\(engine.downloadSize ?? "")).")
+                Text("Not downloaded yet (\(engine.downloadSize ?? ""))")
+                Spacer()
                 Button("Download Now") { session.prepareEngine(engine) }
                     .controlSize(.small)
             case .failed(let message):
-                Text("Couldn't load: \(message)").foregroundStyle(.red)
+                Label("Couldn't load: \(message)", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Spacer()
                 Button("Try Again") { session.prepareEngine(engine) }
                     .controlSize(.small)
             case .ready:
-                if engine == .macOS {
-                    Text(systemVoiceStatus)
-                } else if engine == .myVoice && !session.hasMyVoice {
-                    Text("Record your voice below first.")
-                } else {
-                    Text("Ready")
-                }
+                EmptyView()
             }
         }
-        .font(.caption)
+        .font(.callout)
         .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
-/// Record (or pick) a sample of your voice, then hear replies in it.
-private struct MyVoiceSection: View {
+// MARK: - Voice cloning
+
+private struct VoiceCloningPane: View {
+    var body: some View {
+        Form {
+            PaneHeader(pane: .cloning)
+            RussianCloningSection()
+            EnglishCloningSection()
+        }
+    }
+}
+
+/// Text to read, buttons to record or pick a file, and how that's going.
+private struct VoiceCapture: View {
+    let script: String
+    let seconds: Int
+    let busy: Bool
+    let status: String?
+    let record: () async -> Void
+    let importFile: (URL) async -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Read this aloud")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(script)
+                .font(.callout)
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        HStack {
+            Button {
+                Task { await record() }
+            } label: {
+                Label("Record (\(seconds) s)", systemImage: "record.circle")
+            }
+            Button("Use an Audio File…") {
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = [.audio]
+                if panel.runModal() == .OK, let url = panel.url {
+                    Task { await importFile(url) }
+                }
+            }
+        }
+        .disabled(busy)
+        if let status {
+            HStack(spacing: 6) {
+                if busy { ProgressView().controlSize(.small) }
+                Text(status).font(.callout)
+            }
+        }
+    }
+}
+
+private struct RussianCloningSection: View {
     @Environment(VoiceSession.self) private var session
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Read this aloud")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(VoiceSession.voiceScript)
-                    .font(.callout)
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            HStack {
-                Button {
-                    Task { await session.recordMyVoice() }
+            if session.speechEngines[.russian] == .f5Russian {
+                VoiceCapture(
+                    script: VoiceSession.f5VoiceScript, seconds: 8, busy: session.f5VoiceBusy, status: session.f5VoiceStatus,
+                    record: { await session.recordF5Voice() }, importFile: { await session.importF5Voice(from: $0) })
+                ForEach(session.f5Voices) { ClonedVoiceRow(voice: $0) }
+            } else {
+                LabeledContent {
+                    Button("Use F5-TTS for Russian") { session.setEngine(.f5Russian, for: .russian) }
                 } label: {
-                    Label(session.hasMyVoice ? "Re-record (12 s)" : "Record My Voice (12 s)", systemImage: "record.circle")
-                }
-                Button("Use an Audio File…") {
-                    let panel = NSOpenPanel()
-                    panel.allowedContentTypes = [.audio]
-                    if panel.runModal() == .OK, let url = panel.url {
-                        Task { await session.importMyVoice(from: url) }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("F5-TTS Russian isn't on")
+                        if !SpeechEngine.f5Russian.isInstalled, let size = SpeechEngine.f5Russian.downloadSize {
+                            Text("Downloads \(size)").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                }
-                Spacer()
-                if session.hasMyVoice {
-                    Button("Delete", role: .destructive) { session.deleteMyVoice() }
-                }
-            }
-            .disabled(session.myVoiceBusy)
-            if let status = session.myVoiceStatus {
-                HStack(spacing: 6) {
-                    if session.myVoiceBusy { ProgressView().controlSize(.small) }
-                    Text(status).font(.callout)
                 }
             }
         } header: {
-            Text("Your voice")
+            Text("Russian, with F5-TTS")
         } footer: {
-            Footer("Read at your normal pace in a quiet room. Everything stays on this Mac. Pick \"My voice\" under Speech models to use it for English replies; a little slower than the built-in voices.")
+            Footer("A clear clip of one person works best, and up to 8 seconds is used. Only clone a voice you have permission to use. Everything stays on this Mac.")
+        }
+    }
+}
+
+/// A cloned voice: use it, rename it, correct what it says, or delete it.
+private struct ClonedVoiceRow: View {
+    @Environment(VoiceSession.self) private var session
+    @State private var confirmDelete = false
+    let voice: F5ClonedVoice
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("Name", text: Binding(
+                    get: { voice.name }, set: { session.updateF5Voice(voice.id, name: $0) }))
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .font(.body.weight(.medium))
+                if session.f5VoiceID == voice.id {
+                    Label("In use", systemImage: "checkmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(Theme.violet)
+                } else {
+                    Button("Use") { session.f5VoiceID = voice.id }
+                }
+                Button("Delete", role: .destructive) { confirmDelete = true }
+                    .confirmationDialog("Delete \(voice.name)?", isPresented: $confirmDelete) {
+                        Button("Delete", role: .destructive) { session.deleteF5Voice(voice.id) }
+                    } message: {
+                        Text("This can't be undone.")
+                    }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("What's said in the clip (the words must match)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("What's said in the clip", text: Binding(
+                    get: { voice.transcript }, set: { session.updateF5Voice(voice.id, transcript: $0) }),
+                    axis: .vertical)
+                    .labelsHidden()
+                    .font(.callout)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct EnglishCloningSection: View {
+    @Environment(VoiceSession.self) private var session
+    @State private var confirmDelete = false
+
+    var body: some View {
+        Section {
+            VoiceCapture(
+                script: VoiceSession.voiceScript, seconds: 12, busy: session.myVoiceBusy, status: session.myVoiceStatus,
+                record: { await session.recordMyVoice() }, importFile: { await session.importMyVoice(from: $0) })
+            if session.hasMyVoice {
+                LabeledContent(session.speechEngines[.english] == .myVoice ? "In use for English" : "Your recording") {
+                    HStack(spacing: 8) {
+                        if session.speechEngines[.english] != .myVoice {
+                            Button("Use") { session.setEngine(.myVoice, for: .english) }
+                        }
+                        Button("Delete", role: .destructive) { confirmDelete = true }
+                            .confirmationDialog("Delete your recorded voice?", isPresented: $confirmDelete) {
+                                Button("Delete", role: .destructive) { session.deleteMyVoice() }
+                            } message: {
+                                Text("This can't be undone.")
+                            }
+                    }
+                }
+            }
+        } header: {
+            Text("English, with PocketTTS")
+        } footer: {
+            Footer("Read at your normal pace in a quiet room. Everything stays on this Mac. A little slower than the built-in voices.")
         }
     }
 }

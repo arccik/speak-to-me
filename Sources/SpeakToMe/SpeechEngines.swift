@@ -17,6 +17,17 @@ enum SpeechEngine: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// One line for Settings: what to expect from it.
+    var summary: String {
+        switch self {
+        case .kokoro: return "Fast, on-device English."
+        case .myVoice: return "English in a voice you've recorded. A little slower than the built-in voices."
+        case .supertonic: return "Fast, with 31 languages. The voice is shared by every language that uses it."
+        case .f5Russian: return "Can speak in a cloned voice. Takes a second or two per sentence and about 3 GB of memory while chosen. For non-commercial use."
+        case .macOS: return "Your Mac's own voices. Add better ones in System Settings → Accessibility → Spoken Content."
+        }
+    }
+
     /// What's there once downloaded; nil when there's nothing to fetch on demand.
     private var installedPath: String? {
         switch self {
