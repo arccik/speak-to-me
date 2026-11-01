@@ -1,123 +1,138 @@
-# Speak to Me
+<p align="center">
+  <img src="Resources/AppIcon-1024.png" width="120" alt="Speak to Me app icon">
+</p>
 
-A native macOS app for talking to your local AI with your voice. You speak, it answers out loud, and you can interrupt it mid-sentence just by talking. Everything runs on this Mac.
+<h1 align="center">Speak to Me</h1>
+
+<p align="center">
+  Talk to your local AI with your voice, on your own Mac.<br>
+  You speak, it answers out loud, and you can interrupt it mid-sentence just by talking.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-15%2B-blue" alt="macOS 15 or later">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-required-blue" alt="Apple Silicon required">
+  <img src="https://img.shields.io/badge/Swift-6-orange" alt="Swift 6 tools">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+</p>
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/ready.png" alt="The main window, ready to listen"></td>
+    <td><img src="docs/screenshots/speaking.png" alt="The orb speaking a reply, with the words shown below it"></td>
+    <td><img src="docs/screenshots/conversation.png" alt="A conversation with an interrupted reply and a web search"></td>
+  </tr>
+</table>
+
+Speak to Me is a native macOS app that turns any chat model served by [oMLX](https://github.com/jundot/omlx) into a voice assistant. Speech recognition, the language model and speech synthesis all run on your Mac.
+
+> [!NOTE]
+> This is an early personal project, so far run on one machine: an Apple M5 with 24 GB of memory on macOS 27. Reports from other Macs are very welcome.
+
+## Features
+
+- **Natural conversation.** Talk over a reply to interrupt it, without headphones. Replies start while the model is still writing.
+- **Works from any app.** Press <kbd>⌥</kbd><kbd>Space</kbd> to talk, with a floating orb and a menu bar icon.
+- **Answers in your language.** The language you speak is detected, and you choose the speech model for English, Russian and other languages.
+- **Voice cloning.** Record a few seconds or pick an audio file, and hear replies in that voice in English or Russian.
+- **Useful tools.** Web search, reading pages, the current time, and opening apps and web pages.
+- **Sees your screen** when you ask, with a vision model and Screen Recording permission.
+- **Talk or type.** Typed messages work too, and spoken replies can be muted.
+- **Saved conversations,** kept on your Mac. The last one reopens on launch.
+
+## Speech models
+
+Choose a model for each language group in **Settings → Voice**. Switching takes effect from the next reply, and if a model can't say a sentence, the next available one does.
+
+| Model | Languages | Good to know |
+|---|---|---|
+| [Kokoro 82M](https://huggingface.co/FluidInference/kokoro-82m-coreml) | English | The fast default, with 16 voices |
+| [PocketTTS](https://huggingface.co/FluidInference/pocket-tts-coreml) | English | Speaks in a voice you've recorded; downloads about 550 MB |
+| [Supertonic-3](https://huggingface.co/FluidInference/supertonic-3-coreml) | 31 languages | Fast, with several voices; downloads about 160 MB |
+| [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) | Russian | Can clone a voice. Slower, downloads about 1.4 GB, uses about 3 GB of memory, and needs macOS 26.2 or later. **Non-commercial use only** |
+| macOS voices | Depends on what's installed | No download; add better ones in System Settings → Accessibility → Spoken Content |
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/settings-voice.png" alt="Voice settings, with a model and voice for each language"></td>
+    <td><img src="docs/screenshots/settings-cloning.png" alt="Voice cloning settings, with a recorded voice and its transcript"></td>
+  </tr>
+</table>
+
+## Getting started
+
+You'll need:
+
+- A Mac with Apple Silicon, on macOS 15 or later
+- Xcode, plus its Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`)
+- [oMLX](https://github.com/jundot/omlx) running, with at least one chat model. The app reads the host, port and API key from `~/.omlx/settings.json`
+
+Then build and open the app:
+
+```bash
+git clone https://github.com/arccik/speak-to-me.git
+```
+
+```bash
+cd speak-to-me
+```
+
+```bash
+scripts/build-app.sh --install
+```
+
+```bash
+open /Applications/SpeakToMe.app
+```
+
+The first build takes about 15 minutes, mostly compiling MLX's Metal shaders, and later builds reuse them. On first launch the app downloads its core speech models (about 1 GB). Other speech models download only when you choose them.
+
+To keep the microphone permission across rebuilds, sign in to Xcode with an Apple Development certificate, which the script uses automatically. Otherwise macOS may ask again after each build.
+
+## Using it
+
+| Action | How |
+|---|---|
+| Start or stop talking | <kbd>Space</kbd>, the mic button or the orb |
+| Talk from any app | <kbd>⌥</kbd><kbd>Space</kbd> (change it in Settings → Shortcuts) |
+| Interrupt a reply | Just start talking |
+| Stop a reply | <kbd>Esc</kbd> |
+| Mute the mic | <kbd>M</kbd> |
+| New conversation | <kbd>⌘</kbd><kbd>N</kbd> |
+| Settings | <kbd>⌘</kbd><kbd>,</kbd> |
+
+**For faster replies,** pick a mixture-of-experts model such as `gemma-4-26b-a4b` at the top of the window, because dense models of 12B and up feel slow in conversation. The ⚡ number shows the time from when you stopped talking to the first word of the reply. On the M5 above, that's about 1.2 s with Kokoro and that Gemma model, including the 0.77 s wait to be sure you've finished.
+
+## Privacy
+
+Your voice, conversations and cloned voices stay on your Mac. The app connects to the network only for:
+
+- your oMLX server, which is local by default
+- downloading speech models from Hugging Face
+- web search and page reading, when the model uses those tools (turn them off in Settings → Conversation)
+
+Only clone a voice you have permission to use.
 
 ## How it works
 
 ```
-mic ─▶ echo cancel ─▶ Silero VAD ─▶ Parakeet v3 ─▶ oMLX (your LLM, streaming, tools) ─▶ sentence splitter ─▶ Kokoro ─▶ speaker
-        (Apple)        (Neural Engine)  (Neural Engine)       (GPU)                                       (helper process)
+mic ─▶ echo cancel ─▶ Silero VAD ─▶ Parakeet v3 ─▶ oMLX ─▶ sentence splitter ─▶ speech model ─▶ speaker
 ```
 
-| Stage | Tech | Why |
-|---|---|---|
-| Audio in/out | `AVAudioEngine` with voice processing | Apple's echo canceller removes the assistant's own voice from the mic, so you can interrupt without headphones |
-| Turn detection | Silero VAD (Core ML, via [FluidAudio](https://github.com/FluidInference/FluidAudio)) | Knows when you start talking (barge-in) and when you've finished |
-| Speech → text | Parakeet TDT 0.6B v3 (Core ML) | ~50 ms per utterance on the Neural Engine, 25 languages, leaves the GPU to the LLM |
-| Thinking | Any chat model in **oMLX** (`/v1/chat/completions`, streamed) | Uses the models you already have; thinking mode is switched off for speed |
-| Text → speech | Kokoro 82M (FluidAudio ANE v3) in a helper process | ~130 ms per sentence; isolated because Core ML crashes on some inputs on macOS 27 |
+Models run mostly on the Neural Engine through Core ML, which leaves the GPU to the language model. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, the latency tricks, the test modes and a map of the code.
 
-### Latency tricks
+## Contributing
 
-- **Drafting:** after 256 ms of silence the app already transcribes, asks the model and synthesizes the reply, but holds the audio. If you keep quiet for the full end-of-turn wait it plays at once; if you speak again the draft is thrown away. Saves ~0.5 s per reply.
-- **Sentence streaming:** the reply is spoken sentence by sentence as the model writes it; the first sentence is cut at a comma.
-- **Live transcript:** your words appear while you talk (Parakeet re-runs every ~0.5 s).
+Issues and pull requests are welcome, and reports from other Macs are especially useful. Before opening a pull request:
 
-Measured on an M5 with `gemma-4-26b-a4b-it-4bit`: about 1.2 s from the end of your speech to the first spoken word, including the 0.77 s silence wait. Dense models are much slower (`gemma-4-12B`: ~3.3 s).
+1. Build with `scripts/build-app.sh`.
+2. Run the self tests that apply, listed in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#tests-and-diagnostics).
+3. For a visual change, render the window with `--snapshot` and include the images.
 
-### F5-TTS Russian
+## License
 
-Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) (CC-BY-NC-4.0, so non-commercial) has no Core ML build, so it runs on MLX, on the GPU, in its own helper process (`--f5-worker`). Choosing it downloads about 1.4 GB. It imitates a short clip made with the chosen Supertonic-3 voice, numbers are spelled out first because it reads digits badly, and word stress is marked from [RUAccent](https://github.com/Den4ikAI/ruaccent)'s dictionary (MIT; its neural models aren't used, so homographs and unknown words stay unmarked). You can clone a voice for it in Settings by recording or picking a clip (`F5VoiceLibrary.swift`; Parakeet writes the transcript, which you can correct), and fix individual words by marking their stress. The helper (about 3 GB at its peak) exits as soon as another model is chosen. If it's still downloading or it fails, the next model says the sentence.
+The code is [MIT licensed](LICENSE). The speech models aren't in this repository: they download when needed and have their own licences, including F5-TTS Russian's non-commercial one. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-`swift build` can't compile MLX's Metal shaders, so `scripts/build-mlx-shaders.sh` does (once, about 15 minutes, 193 MB), and `build-app.sh` puts them next to the executable. That needs Xcode's Metal Toolchain and F5-TTS needs macOS 26.2 or later:
+## Acknowledgments
 
-```bash
-xcodebuild -downloadComponent MetalToolchain
-```
-
-To run a debug build with F5-TTS, copy `.build/mlx.metallib` next to the binary.
-
-### Why a helper process for the voice
-
-Kokoro crashes inside Apple's Core ML CPU backend (libBNNS) for certain inputs on macOS 27 (a fixed phoneme-token count). The crash can't be caught, so the voice runs in a child process (`SpeakToMe --tts-worker`). If it dies, a pre-loaded standby takes over and the sentence is retried with one punctuation token more or less, which sounds the same. Recovery costs ~0.3 s instead of crashing the app.
-
-## Features
-
-- **Talk or type.** The message box works with or without the mic; the speaker button mutes spoken replies.
-- **⌥Space from any app** toggles listening and shows a **floating orb** (drag it anywhere, right-click for options). There's also a menu bar icon.
-- **Conversations are saved** automatically and the last one reopens on launch; the clock button lists past chats.
-- **Answers in your language.** The language you speak is detected, and Settings → Voice → Speech models picks the model for English, Russian and other languages: Kokoro or your voice for English, Supertonic-3 or a macOS system voice for the rest, plus F5-TTS Russian for Russian (install better ones in System Settings → Accessibility → Spoken Content → Manage Voices).
-- **Sees your screen** when you ask "what's on my screen?" or turn on the eye button (needs a vision model like gemma-4 and Screen Recording permission).
-- **Tools:** web search and page reading (oMLX's built-in DuckDuckGo search), the current time, opening apps and web pages. Draft replies never open anything until they're final.
-- **Your own voice:** record 12 s in Settings (or pick a file) and choose "My voice" for English to use a PocketTTS clone of it.
-- **Keep model loaded** (off by default): pins the model in oMLX so it's never unloaded. On a 24 GB Mac a pinned model can leave no room for another, so only turn it on if this is the only model you use.
-- Soft sound cues when the mic turns on and off.
-
-## Requirements
-
-- Apple Silicon Mac, macOS 15+, Xcode (for `swift`)
-- [oMLX](https://github.com/jundot/omlx) running. The app reads host, port and API key from `~/.omlx/settings.json`, so no keys are stored in this repo.
-
-## Build and run
-
-```bash
-scripts/build-app.sh
-```
-
-```bash
-open build/SpeakToMe.app
-```
-
-`scripts/build-app.sh --install` also copies it to `/Applications`. The script signs with your Apple Development certificate when you have one, so macOS remembers the microphone permission across rebuilds.
-
-On first launch FluidAudio downloads Parakeet v3, Silero VAD and Kokoro (about 1 GB, compiled once) into `~/Library/Application Support/SpeakToMe/Models`. Cloning your voice downloads PocketTTS the first time. FluidVoice's Core ML copies can't be reused: they're an older build that current FluidAudio rejects.
-
-## Using it
-
-- **Space** (when not typing), the mic button or the orb starts/stops listening. **⌥Space** works from any app.
-- It replies after your pause (Settings → Turn-taking). Talk over it to interrupt.
-- **⌘N** starts a new conversation.
-- Pick the model at the top. Mixture-of-experts models (`gemma-4-26b-a4b`) reply fastest; dense 12B+ models feel slow in conversation.
-- The ⚡ number is the time from when you stopped talking to the first word of the reply.
-
-## Tests and diagnostics
-
-```bash
-build/SpeakToMe.app/Contents/MacOS/SpeakToMe --selftest [model]
-```
-Whole voice pipeline without a mic (Kokoro speaks a question → Parakeet → oMLX → Kokoro), with per-stage timings.
-
-```bash
-build/SpeakToMe.app/Contents/MacOS/SpeakToMe --chattest
-```
-Drives the real conversation loop with typed messages (time, web search, a joke, Polish), replies muted.
-
-| Flag | What it does |
-|---|---|
-| `--ttsstress [n]` | Synthesizes n sentences through the voice helper and reports crashes/recoveries (`SPEAKTOME_KOKORO=v3gpu\|legacy` to compare routes, `SPEAKTOME_SENTENCES="a\|b"` for custom text) |
-| `--langtest` | Language detection and macOS voice per language |
-| `--speechtest [dir]` | Every speech model choice per language group on one running instance, with what Parakeet hears back; writes WAVs to `dir` |
-| `--f5test <modelDir> <ref.wav> <refText> <dir>` | F5-TTS alone with a fixed seed, to compare with another implementation; writes WAVs to `dir` |
-| `--f5clonetest <sample> <dir>` | An audio file through the same steps as adding a voice, then F5-TTS speaking in it and in the built-in voice; writes WAVs to `dir` |
-| `--replytest <model> [engine]` | Where the wait goes in a Russian spoken reply, with the language model and voice running together |
-| `--f5switchtest` | Through the real session: choose F5-TTS Russian, time it idle and while oMLX writes, kill its helper, switch away and check the helper is gone |
-| `--clonetest <dir>` | Clones a voice from a Kokoro-made sample; writes `sample.wav` and `cloned.wav` |
-| `--snapshot <dir>` | Renders the window in several states to PNGs |
-| `--micdiag` (via `open … --args`) | Checks mic permission and that the audio engine starts |
-
-## Code map
-
-- `VoiceSession.swift`: the conversation loop: turn-taking, drafts, barge-in, tools, languages, saved chats, your voice
-- `AudioIO.swift`: mic (16 kHz) and playback (24 kHz) on one engine with echo cancellation; live levels
-- `SpeechEngines.swift`: the speech models you can choose, per language group, and their fallbacks
-- `SpeechModels.swift`: loads VAD and Parakeet; speaks with the chosen model
-- `F5TTS.swift`: F5-TTS and its Vocos vocoder, ported to MLX Swift (inference only)
-- `RussianStress.swift`: stress marks from RUAccent's dictionary, searched on disk
-- `F5Voice.swift`: F5-TTS Russian's download, reference clip and helper process
-- `TTSWorker.swift`: the crash-isolated voice helper process (Kokoro + PocketTTS) with a hot standby
-- `OMLXClient.swift`: model list, streaming chat with images and tool calls, model pinning
-- `Tools.swift`: web search, page reading, time, opening apps and pages
-- `ScreenVision.swift`, `Languages.swift`, `SoundCues.swift`, `HotKey.swift`, `MiniOrb.swift`, `ConversationStore.swift`
-- `Visuals.swift` (mist orb, glow waves), `ContentView.swift` (window, chat, settings)
-- `SentenceChunker.swift`: splits the streamed reply into speakable pieces and strips markdown
-- `SelfTest.swift`, `Snapshots.swift`, `MicDiagnostics.swift`: the test modes above
+Built on [FluidAudio](https://github.com/FluidInference/FluidAudio), [MLX Swift](https://github.com/ml-explore/mlx-swift) and [oMLX](https://github.com/jundot/omlx). The F5-TTS code is ported from Lucas Newman's [f5-tts-mlx](https://github.com/lucasnewman/f5-tts-mlx) and [vocos-mlx](https://github.com/lucasnewman/vocos-mlx). Word stress comes from [RUAccent](https://github.com/Den4ikAI/ruaccent)'s dictionary.

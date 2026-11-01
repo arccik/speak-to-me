@@ -289,8 +289,13 @@ extension View {
     }
 
     /// Reports whether the view's window is actually on screen.
-    func onWindowVisibilityChange(_ action: @escaping (Bool) -> Void) -> some View {
-        background(WindowVisibilityProbe(onChange: action))
+    @ViewBuilder func onWindowVisibilityChange(_ action: @escaping (Bool) -> Void) -> some View {
+        // ImageRenderer draws any AppKit view as a placeholder, over whatever it's attached to.
+        if Snapshots.isRendering {
+            self
+        } else {
+            background(WindowVisibilityProbe(onChange: action))
+        }
     }
 }
 
