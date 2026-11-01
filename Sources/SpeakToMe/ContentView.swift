@@ -446,7 +446,6 @@ private struct Words: View {
                 .tracking(size > 30 ? -0.5 : -0.2)
                 .lineSpacing(size > 30 ? -2 : 1)
                 .foregroundStyle(color(current))
-                .opacity(current.interrupted ? 0.72 : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxHeight: 190, alignment: .bottomLeading)
                 .fixedSize(horizontal: false, vertical: true) // only as tall as the words, up to that

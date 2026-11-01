@@ -593,7 +593,7 @@ private struct ClonedVoiceRow: View {
                 if session.f5VoiceID == voice.id {
                     Label("In use", systemImage: "checkmark.circle.fill")
                         .font(.callout)
-                        .foregroundStyle(Theme.acid)
+                        .foregroundStyle(.primary)
                 } else {
                     Button("Use") { session.f5VoiceID = voice.id }
                 }
