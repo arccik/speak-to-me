@@ -10,8 +10,8 @@ final class LatheEngine {
     static let windowSamples = 16_384 // the 64 turns the shader can see
 
     /// Two bytes a sample: how far the groove swings, and whose it is (0 you, 255 the reply).
-    /// The swing leans on the turn before it, so neighbouring grooves nest instead of
-    /// crossing, and waves ease out over a few turns after you stop instead of ending in a stub.
+    /// The swing leans a little on the turn before it, so neighbouring grooves nest instead of
+    /// crossing, and waves ease out instead of ending in a stub. Mostly it's the voice right now.
     private var log: [UInt8] = []
     private var owner: UInt8 = 0
     private var position = 0.0 // in samples
@@ -128,7 +128,7 @@ final class LatheEngine {
     private func cut(you: UInt8, reply: UInt8) {
         let previousTurn = log.count - Self.samplesPerTurn * 2
         let before = previousTurn >= 0 ? Int(log[previousTurn]) : Int(max(you, reply))
-        log.append(UInt8((Int(max(you, reply)) + before) / 2))
+        log.append(UInt8((Int(max(you, reply)) * 7 + before * 3) / 10))
         if max(you, reply) > 8 { owner = reply > you ? 255 : 0 }
         log.append(owner)
     }

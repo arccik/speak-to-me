@@ -394,13 +394,14 @@ final class LatheRenderer {
                 float swing = u.pitch * (0.3 + heat * mix(0.8, 4.2, saturate(u.pitch / (9 * s)))) * env * wave;
                 float shiver = u.level * u.pitch * 0.5 * sin(TAU * at * 7.0 + u.clock * 5.0);
                 float dist = abs(rb - (u.headR + u.pitch * age + swing + shiver));
-                float cut = smoothstep(0.02, 0.3, env);
+                float cut = smoothstep(0.02, mix(0.1, 0.3, saturate(u.pitch / (9 * s))), env);
                 float w = s * mix(0.42, 0.65 + 1.3 * heat, cut) * (u.pitch / (9 * s) * 0.5 + 0.5);
                 float cover = 1 - smoothstep(w - 0.7, w + 0.7, dist);
                 float3 pure = mix(u.you.rgb, u.reply.rgb, e.g);
-                // A cool groove gets thinner, not duller: it keeps its colour.
+                // A groove keeps its full colour while it's hot, getting thinner, then
+                // quickly sinks back into the vinyl: only what's being cut stands out.
                 float3 ink = mix(vinyl * 0.58, pure, cut);
-                float strength = mix(0.62, 0.5 + 0.5 * heat, cut);
+                float strength = mix(0.62, mix(0.22, 1.0, smoothstep(0.12, 0.5, heat)), cut);
                 // A hot groove glows a little into the vinyl around it.
                 color += pure * exp(-dist / (2.6 * u.pitch / 9)) * heat * cut * 0.09 * hush;
                 color = mix(color, ink, cover * strength * hush);

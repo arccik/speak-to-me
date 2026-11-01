@@ -69,6 +69,7 @@ enum UIDrive {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) else {
             print("DRIVE no window"); exit(1)
         }
+        print("DRIVE responder=\(String(describing: window.firstResponder.map { type(of: $0) })) isWindow=\(window.firstResponder === window) isContent=\(window.firstResponder === window.contentView) content=\(String(describing: window.contentView.map { type(of: $0) }))")
         window.orderFrontRegardless() // a covered window pauses itself; this doesn't take the keyboard
         session.beginTestConversation(lines: [
             .init(role: "user", text: "What's the tallest mountain in Europe?"),
@@ -101,6 +102,10 @@ enum UIDrive {
         session.lines.append(.init(role: "assistant", text: "Most people take about a week, to give the body time to adjust to the"))
         await play(.speaking, seconds: 7) { session.levels.speaker = $0 }
         capture(window, "4-speaking")
+        session.lines[session.lines.count - 1].text = String(repeating: "Most people take about a week, to give the body time to adjust. ", count: 4)
+        try? await Task.sleep(for: .seconds(1))
+        capture(window, "4b-long-reply")
+        session.lines[session.lines.count - 1].text = "Most people take about a week, to give the body time to adjust to the"
         report("fed the reply")
 
         session.lines[session.lines.count - 1].interrupted = true

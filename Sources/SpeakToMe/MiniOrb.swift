@@ -67,7 +67,7 @@ private struct MiniOrbView: View {
                 .padding(.top, 2)
             if let snippet {
                 Text(snippet)
-                    .font(.display(11, weight: .semibold))
+                    .font(.display(11, weight: .semibold, for: snippet))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)

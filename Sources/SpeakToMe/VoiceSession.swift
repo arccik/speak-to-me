@@ -857,7 +857,7 @@ final class VoiceSession {
         }
     }
 
-    /// Echo cancellation runs only around replies, so other apps keep their volume the rest of the time.
+    /// Echo cancellation stays on while you're talking back and forth, and lets go after a long quiet spell.
     private func followEchoCancellation() {
         switch phase {
         case .transcribing, .thinking, .speaking: audio.prepareEchoCancellation()

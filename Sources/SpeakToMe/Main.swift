@@ -41,6 +41,10 @@ enum Main {
             Task.detached { await SelfTest.replyTiming(model: model, engine: engine) }
             dispatchMain()
         }
+        if args.contains("--cliptest") {
+            Task.detached { await SelfTest.clips() }
+            dispatchMain()
+        }
         if args.contains("--ssmltest") {
             let flag = args.firstIndex(of: "--ssmltest")! + 1
             let model = args.indices.contains(flag) ? args[flag] : nil

@@ -125,7 +125,18 @@ final class F5TTS {
         }
 
         let mel = which(keep, cond, y)
-        return Self.levelled(Array(vocoder.decode(mel).dropFirst(reference.samples)))
+        return Self.levelled(Self.withoutSeam(Array(vocoder.decode(mel).dropFirst(reference.samples))))
+    }
+
+    /// Where the new speech joins the reference, the vocoder leaves a sharp tick about 35 ms
+    /// in, heard as a click at the start of a sentence. The first words don't start that early.
+    private static func withoutSeam(_ samples: [Float]) -> [Float] {
+        var out = samples
+        let silent = sampleRate * 45 / 1000, fade = sampleRate * 10 / 1000
+        for i in 0..<min(out.count, silent + fade) {
+            out[i] *= i < silent ? 0 : Float(i - silent) / Float(fade)
+        }
+        return out
     }
 }
 

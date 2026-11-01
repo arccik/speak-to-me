@@ -698,7 +698,7 @@ private struct MessageRow: View {
 
     private var error: some View {
         Label(line.text, systemImage: "exclamationmark.triangle.fill")
-            .font(.display(14, weight: .bold))
+            .font(.display(14, weight: .bold, for: line.text))
             .foregroundStyle(Theme.acid)
     }
 }
@@ -770,7 +770,7 @@ private struct NoteLabel: View {
 
     var body: some View {
         Label(text, systemImage: systemImage)
-            .font(.display(12, weight: .semibold))
+            .font(.display(12, weight: .semibold, for: text))
             .foregroundStyle(Theme.text)
             .lineLimit(2)
     }
@@ -904,7 +904,7 @@ private struct Dock: View {
             HStack(alignment: .bottom, spacing: 6) {
                 TextField("", text: $draft, prompt: Text("Type something").foregroundStyle(Theme.text.opacity(0.8)), axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.display(22))
+                    .font(.display(22, for: draft))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1...4)
                     .focused($focused)

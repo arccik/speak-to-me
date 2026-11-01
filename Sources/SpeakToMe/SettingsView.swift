@@ -39,13 +39,27 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(Pane.allCases, selection: Binding(get: { pane }, set: { if let p = $0 { pane = p } })) { pane in
-                Label(pane.title, systemImage: pane.icon)
-                    .padding(.vertical, 2)
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    Image(systemName: pane.icon).foregroundStyle(Theme.vinyl)
+                }
+                .padding(.vertical, 2)
             }
             .navigationSplitViewColumnWidth(190)
             .toolbar(removing: .sidebarToggle)
         } detail: {
-            Group {
+            VStack(alignment: .leading, spacing: 0) {
+                // The pane's name, set large, and one line of explanation, above the form.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(pane.title).font(.display(22))
+                    Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 18)
+                .padding(.bottom, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
                 switch pane {
                 case .general: GeneralPane()
                 case .shortcuts: ShortcutsPane()
@@ -54,8 +68,11 @@ struct SettingsView: View {
                 case .conversation: ConversationPane()
                 case .model: ModelPane()
                 }
+                }
+                .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
             }
-            .formStyle(.grouped)
+            .background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(pane.title)
         }
         .frame(width: 720, height: Self.height)
@@ -64,21 +81,6 @@ struct SettingsView: View {
 }
 
 // MARK: - Building blocks
-
-/// The pane's name, set large, and one line of explanation.
-private struct PaneHeader: View {
-    let pane: SettingsView.Pane
-
-    var body: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(pane.title).font(.display(22))
-                Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
-            }
-            .listRowBackground(Color.clear)
-        }
-    }
-}
 
 /// A slider with words at each end and the current value on the right.
 private struct LabeledSlider<V: BinaryFloatingPoint>: View where V.Stride: BinaryFloatingPoint {
@@ -136,7 +138,6 @@ private struct GeneralPane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            PaneHeader(pane: .general)
             Section("Sounds") {
                 Toggle("Play a sound when the mic turns on and off", isOn: $session.soundCues)
                 Toggle("Speak replies out loud", isOn: Binding(get: { !session.muteReplies }, set: { session.muteReplies = !$0 }))
@@ -180,7 +181,6 @@ private struct ShortcutsPane: View {
 
     var body: some View {
         Form {
-            PaneHeader(pane: .shortcuts)
             Section {
                 row("Start or stop talking", detail: "Works in every app", action: .talk)
                 row("Show or hide the floating record", detail: "Keep it in a corner while you work", action: .floatingOrb)
@@ -242,7 +242,6 @@ private struct VoicePane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            PaneHeader(pane: .voice)
             ForEach(SpeechSlot.allCases) { LanguageSection(slot: $0) }
             Section {
                 LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
@@ -496,7 +495,6 @@ private struct SpeechModelStatus: View {
 private struct VoiceCloningPane: View {
     var body: some View {
         Form {
-            PaneHeader(pane: .cloning)
             RussianCloningSection()
             EnglishCloningSection()
         }
@@ -674,7 +672,6 @@ private struct ConversationPane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            PaneHeader(pane: .conversation)
             Section {
                 LabeledSlider(title: "Reply after a pause of", value: endOfTurn, range: 256...2048, step: 128,
                               low: "Snappy", high: "Patient") { "\(Int($0)) ms" }
@@ -686,7 +683,7 @@ private struct ConversationPane: View {
             Section {
                 Toggle("Let me interrupt replies without headphones", isOn: $session.echoCancellation)
             } footer: {
-                Footer("Cancels the assistant's voice from the mic so you can talk over it. It only runs while a reply is under way; macOS turns down other apps' sound, like YouTube or music, during that time. When off, the mic pauses while a reply plays. Takes effect the next time you start talking.")
+                Footer("Cancels the assistant's voice from the mic so you can talk over it. It stays on while you talk back and forth, and macOS turns down other apps' sound while it runs. After 45 quiet seconds it lets go, and the next reply takes about 2 seconds longer to start. When off, the mic pauses while a reply plays. Takes effect the next time you start talking.")
             }
             Section("Personality") {
                 HStack(spacing: 8) {
@@ -743,7 +740,6 @@ private struct ModelPane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            PaneHeader(pane: .model)
             Section {
                 Picker("Model", selection: Binding(get: { session.modelID }, set: {
                     session.modelID = $0

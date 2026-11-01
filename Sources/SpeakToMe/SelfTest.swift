@@ -251,6 +251,94 @@ extension SelfTest {
     /// `SpeakToMe --speechtest`: every model choice for every language group, switched on
     /// one running set of models, with what Parakeet hears back. With a folder, also
     /// writes each as a WAV to compare by ear.
+    /// `SpeakToMe --cliptest`: what could click or lag in each sentence of a Russian reply:
+    /// how hard each clip starts and ends, and how long it takes to make. Plays nothing.
+    static func clips() async {
+        let speech: SpeechModels
+        do { speech = try await SpeechModels.load(voice: "af_heart") { _ in } } catch {
+            print("load failed: \(error)"); exit(1)
+        }
+        let sentences = ["Привет, рада тебя слышать.", "Самая высокая гора в Европе это Эльбрус.",
+                         "Твой сигнал пробился сквозь туман, капитан.", "Да.", "Что тебе рассказать дальше?"]
+        for engine in [SpeechEngine.f5Russian, .supertonic] {
+            let setup = SpeechSetup(engines: [.russian: engine])
+            do { try await speech.prepare(engine, using: setup) } catch { print("skip \(engine.rawValue): \(error)"); continue }
+            for sentence in sentences {
+                let start = Date()
+                guard let audio = try? await speech.speak(sentence, language: "ru", using: setup), audio.count > 500 else { continue }
+                let took = Date().timeIntervalSince(start)
+                let seconds = Double(audio.count) / 24_000
+                let mean = audio.reduce(0, +) / Float(audio.count)
+                var jump: Float = 0
+                for i in 1..<audio.count { jump = max(jump, abs(audio[i] - audio[i - 1])) }
+                // A click: one sample-to-sample step far bigger than the steps around it.
+                var clicks: [Double] = []
+                var i = 120
+                while i < audio.count - 120 {
+                    let step = abs(audio[i] - audio[i - 1])
+                    if step > 0.05 {
+                        var sum: Float = 0
+                        for j in (i - 120)..<(i + 120) where abs(j - i) > 3 { sum += abs(audio[j] - audio[j - 1]) }
+                        if step > 8 * sum / 233 { clicks.append(Double(i) / 24_000); i += 240 }
+                    }
+                    i += 1
+                }
+                if let dir = ProcessInfo.processInfo.environment["CLIP_DIR"] {
+                    try? WAV.data(audio, sampleRate: 24_000).write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(engine.rawValue)-\(sentence.prefix(6)).wav"))
+                }
+                print("CLICKS \(engine.rawValue) \(clicks.count) at \(clicks.map { String(format: "%.3f", $0) }.joined(separator: " "))")
+                print(String(format: "CLIP %@ made %.2fs for %.2fs of audio | first %.4f last %.4f | tail peak %.3f | biggest jump %.3f | peak %.3f | dc %.4f | %@",
+                             engine.rawValue, took, seconds, abs(audio[0]), abs(audio[audio.count - 1]),
+                             audio.suffix(240).map(abs).max() ?? 0, jump, audio.map(abs).max() ?? 0, mean, sentence))
+            }
+        }
+        await audioSwitch()
+        await recordCost()
+        exit(0)
+    }
+
+    /// How long the audio engine is gone when echo cancellation switches on and off.
+    private static func audioSwitch() async {
+        let audio = AudioIO()
+        var begin = Date()
+        let started = await withCheckedContinuation { (done: CheckedContinuation<Error?, Never>) in
+            DispatchQueue.main.async { audio.start(echoCancellation: true) { done.resume(returning: $0) } }
+        }
+        print(String(format: "SWITCH mic start took %.0f ms, error: %@, echo cancellation on: %@", Date().timeIntervalSince(begin) * 1000,
+                     String(describing: started), audio.echoCancellationActive ? "yes" : "no"))
+        // Back and forth, the way a conversation goes: nothing should need rebuilding.
+        for round in 1...3 {
+            begin = Date()
+            await MainActor.run { audio.prepareEchoCancellation() }
+            print(String(format: "SWITCH turn %d into a reply: %.0f ms, on: %@", round, Date().timeIntervalSince(begin) * 1000, audio.echoCancellationActive ? "yes" : "no"))
+            await MainActor.run { audio.relaxEchoCancellation() }
+            try? await Task.sleep(for: .seconds(4))
+            print("SWITCH turn \(round) 4s after the reply, still on: \(audio.echoCancellationActive ? "yes" : "no")")
+        }
+        begin = Date()
+        await MainActor.run { audio.relaxEchoCancellation(after: 0) }
+        for _ in 0..<500 where audio.echoCancellationActive { try? await Task.sleep(for: .milliseconds(10)) }
+        print(String(format: "SWITCH long quiet spell: let go after %.0f ms", Date().timeIntervalSince(begin) * 1000))
+        await MainActor.run { audio.stop() }
+    }
+
+    /// What one frame of the record costs the GPU in the main window, mid-conversation.
+    private static func recordCost() async {
+        guard let renderer = LatheRenderer.shared else { return }
+        let engine = LatheEngine()
+        let levels = AudioLevels()
+        levels.speaker = 0.7
+        var now = 0.0
+        engine.step(phase: .ready, muted: false, levels: levels, now: now)
+        for _ in 0..<1200 { now += 1.0 / 30; engine.step(phase: .speaking, muted: false, levels: levels, now: now) }
+        let begin = Date()
+        for _ in 0..<60 {
+            _ = renderer.image(of: engine, layout: LatheLayout(style: .stage, labelText: "SPEAK TO ME", hush: 270),
+                               points: CGSize(width: 520, height: 800), scale: 2)
+        }
+        print(String(format: "RECORD %.1f ms a frame at 520x800 @2x, offscreen, including reading it back", Date().timeIntervalSince(begin) * 1000 / 60))
+    }
+
     /// `SpeakToMe --ssmltest`: SSML in a reply never reaches the screen or the words spoken,
     /// and its pauses, rate and pitch change the audio, on every engine. Plays nothing.
     /// With a model name it only asks that model, with and without Expressive voice's prompt.

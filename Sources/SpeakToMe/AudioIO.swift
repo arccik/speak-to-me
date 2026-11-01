@@ -3,12 +3,13 @@ import ObjCSupport
 
 /// Owns the single AVAudioEngine used for both the microphone and playback.
 ///
-/// With echo cancellation on, voice processing is enabled on the input node while the
-/// assistant has something to say: Apple's echo canceller subtracts its voice (played
-/// through `player` on the same engine) from the mic signal, so you can interrupt it
-/// without headphones. Voice processing also makes macOS turn down every other app's
-/// audio, so between replies the engine runs a plain mic and YouTube or music play
-/// at full volume.
+/// With echo cancellation on, voice processing is enabled on the input node from when the
+/// mic starts: Apple's echo canceller subtracts the assistant's voice (played through
+/// `player` on the same engine) from the mic signal, so you can interrupt it without
+/// headphones. Switching it means rebuilding the engine, about two seconds with no audio
+/// either way, so it stays on through a conversation. Voice processing also makes macOS turn
+/// down every other app's audio, so after a long quiet spell the engine goes back to a plain
+/// mic and YouTube or music play at full volume, until the next reply.
 ///
 /// Call the public methods on the main thread. They return at once: building, tearing
 /// down and switching the engine (up to a second or two with voice processing) happens
@@ -106,6 +107,7 @@ final class AudioIO: @unchecked Sendable {
         let run = run
         _isRunning = true
         lock.unlock()
+        let voiceProcessing = echoCancellationWanted
         queue.async { [self] in
             // Just after another engine or app let go of the audio device, starting it can
             // fail with a generic hardware error ('what', 2003329396) that clears up within
@@ -114,7 +116,7 @@ final class AudioIO: @unchecked Sendable {
             for attempt in 1... {
                 guard isCurrent(run) else { return }
                 do {
-                    try build(voiceProcessing: false, mic: withMic)
+                    try build(voiceProcessing: voiceProcessing, mic: withMic)
                     failure = nil
                     break
                 } catch {
@@ -245,9 +247,9 @@ final class AudioIO: @unchecked Sendable {
         echoCancellationOff?.cancel()
     }
 
-    /// Turns echo cancellation off once things have been quiet for a moment, giving
+    /// Turns echo cancellation off once things have been quiet for a good while, giving
     /// other apps their full volume back. Call when the conversation is idle again.
-    func relaxEchoCancellation(after delay: TimeInterval = 1.5) {
+    func relaxEchoCancellation(after delay: TimeInterval = 45) {
         echoCancellationOff?.cancel()
         guard voiceProcessing else { return }
         let work = DispatchWorkItem { [weak self] in

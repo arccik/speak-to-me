@@ -2,7 +2,7 @@
 version: 1
 slug: "sources-speaktome-contentview-swift"
 primary_target: "Sources/SpeakToMe/ContentView.swift"
-related_targets: ["Sources/SpeakToMe/Visuals.swift","Sources/SpeakToMe/OrbRenderer.swift","Sources/SpeakToMe/MiniOrb.swift"]
+related_targets: ["Sources/SpeakToMe/Visuals.swift","Sources/SpeakToMe/LatheEngine.swift","Sources/SpeakToMe/LatheRenderer.swift","Sources/SpeakToMe/MiniOrb.swift","Sources/SpeakToMe/SettingsView.swift"]
 ---
 
 Scope: the main window of Speak to Me, plus the floating record. Mode: Experience. Audience: Mac users having long spoken conversations with a local model at the desk. Task: talk, listen, interrupt. Constraints: every existing feature stays reachable, GPU stays cheap, pauses when idle or hidden.
