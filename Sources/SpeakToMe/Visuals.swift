@@ -28,7 +28,6 @@ struct Mood {
     var strikes = false
 
     static let void = RGBA.hex(0x07080C)
-    static let nearness = RGBA.hex(0x090D16)
     static let oxblood = RGBA.hex(0x2C060C)
     static let hollow = RGBA.hex(0x040406)
     static let cherry = RGBA.hex(0xB5122A)
@@ -41,15 +40,16 @@ struct Mood {
             return Mood(sky: void, smile: 0, eye: 0, thought: 0.7, followsPointer: 0)
         case .ready:
             // The faintest smile, and it watches.
-            return Mood(sky: void, smile: 0.35)
+            return Mood(sky: void, smile: 0.35, mouth: 0.055)
         case .listening where muted:
             return Mood(sky: hollow, smile: -0.1, eye: 0.35, browAsymmetry: 0.3, thought: 0.35)
         case .listening:
-            return Mood(sky: nearness, smile: 0.1, eye: 1.05, brow: 0.2)
+            return Mood(sky: void, smile: 0.1, eye: 1.05, brow: 0.2)
         case .hearing:
-            return Mood(sky: nearness, smile: 0, eye: 1.2, brow: 0.35, mouth: 0.03, tilt: 0.035, strikes: true)
+            return Mood(sky: void, smile: 0, eye: 1.2, brow: 0.35, mouth: 0.03, tilt: 0.035, strikes: true)
         case .transcribing, .thinking:
-            return Mood(sky: oxblood, smile: 0, eye: 0.5, browAsymmetry: 0.5, thought: 0.6, gaze: SIMD2(0, -0.9), tilt: -0.03)
+            // The eyes roll back in its head.
+            return Mood(sky: oxblood, smile: 0, eye: 0.8, browAsymmetry: 0.5, thought: 0.45, gaze: SIMD2(0, -1.5), tilt: -0.03)
         case .speaking:
             return Mood(sky: void, smile: 0.1, followsPointer: 0.6, strikes: true)
         case .failed:
@@ -166,7 +166,7 @@ private struct IdlePause: ViewModifier {
     }
 
     private func update() {
-        let shouldPause = settled || !onScreen
+        let shouldPause = settled || (!onScreen && !UIDrive.isRunning)
         if paused != shouldPause { paused = shouldPause }
     }
 }

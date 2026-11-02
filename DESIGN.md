@@ -1,135 +1,155 @@
 ---
 name: Speak to Me
-description: A local voice assistant whose conversation is cut, live, into one giant record.
+description: A local voice assistant that speaks through a wasted face hanging in black fog.
 colors:
-  cherry-vinyl: "#E5102B"
-  cobalt-label: "#1420FF"
-  acid-reply: "#F4FF3A"
-  white-you: "#FFFFFF"
-  pale-reply: "#FBFFC2"
-  muted-vinyl: "#7A0A1C"
-  stuck-vinyl: "#15131A"
-  hover-wash: "rgba(255, 255, 255, 0.18)"
+  void: "#07080C"
+  oxblood: "#2C060C"
+  hollow: "#040406"
+  you-ink: "#E9ECF1"
+  reply-ink: "#D8CFA8"
+  reply-long: "#D8D2BC"
+  fog: "#8C96A8"
+  mist: "#A9B2C2"
+  wisp-rest: "rgba(169, 178, 194, 0.17)"
+  wisp-firm: "rgba(169, 178, 194, 0.3)"
+  flesh-lit: "#A89E8C"
+  flesh-bruised: "#78696B"
+  enamel: "#BDAB78"
+  rot: "#664721"
+  gum: "#330A0D"
+  vein: "#751412"
+  milk-iris: "#B3BDB8"
+  cherry: "#B5122A"
 typography:
   words-large:
-    fontFamily: "Avenir Next, -apple-system"
+    fontFamily: "Didot, ui-serif, serif"
     fontSize: "34px"
-    fontWeight: 800
-    letterSpacing: "-0.5px"
+    fontWeight: 400
   words-medium:
-    fontFamily: "Avenir Next, -apple-system"
+    fontFamily: "Didot, ui-serif, serif"
     fontSize: "26px"
-    fontWeight: 700
-    letterSpacing: "-0.2px"
+    fontWeight: 400
   words-small:
-    fontFamily: "Avenir Next, -apple-system"
+    fontFamily: "Didot, ui-serif, serif"
     fontSize: "21px"
-    fontWeight: 700
-    letterSpacing: "-0.2px"
+    fontWeight: 400
   status-stamp:
-    fontFamily: "Avenir Next Condensed"
+    fontFamily: "Didot-Italic, Didot, serif"
     fontSize: "24px"
-    fontWeight: 800
+    fontWeight: 400
   type-field:
-    fontFamily: "Avenir Next, -apple-system"
+    fontFamily: "Didot, ui-serif, serif"
     fontSize: "22px"
-    fontWeight: 800
+    fontWeight: 400
   pane-title:
-    fontFamily: "Avenir Next"
+    fontFamily: "Didot, ui-serif, serif"
     fontSize: "22px"
-    fontWeight: 800
-  transcript-you:
-    fontFamily: "Avenir Next, -apple-system"
-    fontSize: "16px"
-    fontWeight: 800
-  transcript-reply:
-    fontFamily: "Avenir Next, -apple-system"
+    fontWeight: 400
+  transcript:
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
     fontSize: "16px"
     fontWeight: 500
+  error-line:
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
+    fontSize: "14px"
+    fontWeight: 500
   action:
-    fontFamily: "Avenir Next"
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
     fontSize: "13px"
-    fontWeight: 700
+    fontWeight: 500
   small-print:
-    fontFamily: "Avenir Next"
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
     fontSize: "12px"
-    fontWeight: 600
+    fontWeight: 500
   puck-caption:
-    fontFamily: "Avenir Next Condensed"
+    fontFamily: "Didot-Italic, Didot, serif"
     fontSize: "13px"
-    fontWeight: 800
+    fontWeight: 400
+  puck-snippet:
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
+    fontSize: "11px"
+    fontWeight: 500
 rounded:
-  square: "0px"
-  chrome: "6px"
+  key-cap: "6px"
   settings-field: "8px"
   settings-chip: "9999px"
 spacing:
-  hairline: "4px"
-  tight: "6px"
-  stack: "12px"
+  status-drop: "8px"
+  dock-stack: "11px"
+  bottom: "16px"
   rhythm: "18px"
   margin: "22px"
+  prompt-gap: "24px"
+  action-gap: "26px"
   settings-margin: "28px"
 components:
-  text-action:
-    textColor: "{colors.white-you}"
+  wisp-action:
+    backgroundColor: "{colors.wisp-rest}"
+    textColor: "{colors.you-ink}"
     typography: "{typography.action}"
-    rounded: "{rounded.square}"
     padding: "0 6px"
     height: "26px"
-  text-action-hover:
-    backgroundColor: "{colors.white-you}"
-    textColor: "{colors.cherry-vinyl}"
+  wisp-action-hover:
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
     typography: "{typography.action}"
-    rounded: "{rounded.square}"
     padding: "0 6px"
     height: "26px"
   top-icon:
-    textColor: "{colors.white-you}"
+    textColor: "{colors.you-ink}"
     width: "28px"
     height: "24px"
   top-icon-hover:
-    backgroundColor: "{colors.hover-wash}"
-    textColor: "{colors.white-you}"
-    rounded: "{rounded.chrome}"
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
     width: "28px"
     height: "24px"
+  reply-action:
+    textColor: "{colors.you-ink}"
+    width: "24px"
+    height: "22px"
+  reply-action-hover:
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
+    width: "24px"
+    height: "22px"
   composer-toggle:
-    textColor: "{colors.white-you}"
-    rounded: "{rounded.square}"
+    textColor: "{colors.you-ink}"
     size: "28px"
   composer-toggle-on:
-    backgroundColor: "{colors.white-you}"
-    textColor: "{colors.cherry-vinyl}"
-    rounded: "{rounded.square}"
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
     size: "28px"
-  sleeve:
-    backgroundColor: "{colors.cobalt-label}"
-    textColor: "{colors.white-you}"
-    rounded: "{rounded.square}"
+  type-field:
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
+    typography: "{typography.type-field}"
+    padding: "8px 10px"
+  fog-bank:
+    backgroundColor: "{colors.void}"
+    textColor: "{colors.you-ink}"
     padding: "14px 22px 16px"
   transcript-you:
-    textColor: "{colors.white-you}"
-    typography: "{typography.transcript-you}"
+    textColor: "{colors.you-ink}"
+    typography: "{typography.transcript}"
     width: "400px"
   transcript-reply:
-    textColor: "{colors.pale-reply}"
-    typography: "{typography.transcript-reply}"
+    textColor: "{colors.reply-long}"
+    typography: "{typography.transcript}"
     width: "480px"
   puck-caption:
-    backgroundColor: "{colors.cherry-vinyl}"
-    textColor: "{colors.white-you}"
+    backgroundColor: "{colors.wisp-firm}"
+    textColor: "{colors.you-ink}"
     typography: "{typography.puck-caption}"
-    rounded: "{rounded.square}"
-    padding: "0 10px"
+    padding: "0 8px"
     height: "20px"
   preset-chip:
     rounded: "{rounded.settings-chip}"
     padding: "0 10px"
     height: "26px"
   preset-chip-selected:
-    backgroundColor: "{colors.cherry-vinyl}"
-    textColor: "{colors.white-you}"
+    backgroundColor: "{colors.cherry}"
+    textColor: "#FFFFFF"
     rounded: "{rounded.settings-chip}"
     padding: "0 10px"
     height: "26px"
@@ -139,193 +159,206 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Cutting Lathe"**
+**Creative North Star: "The Apparition"**
 
-The window is a single record, seen from directly above, too big for its frame. Everything said in the conversation is physically cut into it: your voice in white, the reply in yellow, spiralling outward from the label as a calendar of what was said. There is nothing to press. Clicking anywhere drops the arm; dragging around the disc scratches back through the talk.
+The window is a cold black room with something in it. A wasted, real-looking head hangs in fog, lit from one side so that half of it is lost, dissolving at its edges and slightly askew. Its eyes find your pointer and follow it slowly. When it speaks, its lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.
 
-The surface is loud and flat like a pressed sleeve. Colour runs at full strength over the whole window, heavy geometric type is printed straight onto the vinyl, and one colour change from across the room tells you the phase. Density is low on the stage: one status word, the words being said, a line of underlined controls and a line of small print. Depth comes from the record itself, not from interface layers.
+Density is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, bone relief, and blood only in the flesh and in the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.
 
-The whole of it is driven by one mechanism. Rotation, groove age and a single travelling wavefront account for all stage motion, drawn by one Metal fragment shader, so a long conversation costs the GPU the same as a short one. The world refuses the category's glowing blob and round mic button. Settings is deliberately outside the world: native macOS forms with cherry accents.
+The stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading one noise texture, so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.
 
 **Key Characteristics:**
-- Full-strength cherry vinyl bleeding past every edge, with a cobalt label
-- White ink for you and yellow ink for the reply, on grooves, words and cartridge alike
-- Grooves that start hot and big, then cool and sink back into the vinyl
-- One wavefront carrying each change across the whole surface
-- Heavy type set directly on the vinyl, with no cards, pills or glass on the stage
-- Underlined words as controls, and the whole window as the talk control
+- A near-black ground that changes whole, turning oxblood while it thinks
+- A head of bone-grey relief, lit from one side, dissolving into fog at its edges
+- Lips and ripples driven only by live audio
+- Wet, bloodshot, milky eyes that look through the fog and follow the pointer anywhere on screen
+- Didot for large words, Avenir Next medium for small ones, cold white for you and bone for the reply
+- Controls as thin wisps of mist, with no pills, glass or hard edges, and the whole window as the talk control
 
 ## Colors
 
-Three saturated inks at full strength, on a surface that changes colour whole rather than in part.
+A cold near-black with almost no chroma, where the only warmth is bone and the only red is flesh.
 
 ### Primary
-- **Cherry Vinyl** (#E5102B): The record in loading, ready, listening, hearing and speaking. Also the ink on white when a control inverts, the label in thinking and failure, and the accent throughout Settings.
+- **Void** (#07080C): The ground in loading, ready, listening, hearing and speaking, and the opaque fill of the conversation's fog bank.
+- **Oxblood** (#2C060C): The whole dark while transcribing or thinking. It is the one ground colour that reads from across the room.
 
 ### Secondary
-- **Cobalt Label** (#1420FF): The record's label at rest. In transcribing and thinking it swaps with cherry, so the whole vinyl turns cobalt and the label turns cherry. Also the flat ground of the conversation sleeve.
+- **Reply Bone** (#D8CFA8): The reply's words and ripples. Also transcript error lines and the copied checkmark (12.8:1 on Void, 11.8:1 on Oxblood).
+- **Long Reply Bone** (#D8D2BC): Reply text in the conversation, slightly less yellow for reading at length (13.2:1 on Void).
 
 ### Tertiary
-- **Acid Reply** (#F4FF3A): The reply's ink, in its grooves, its words on the vinyl, and the cartridge while a reply is being cut. Also the spindle dot, which is yellow in every phase.
+- **Flesh Lit** (#A89E8C) and **Flesh Bruised** (#78696B): The skin, blended by slow blotches and multiplied by the light. They are shader materials, never interface colours.
+- **Enamel** (#BDAB78) and **Rot** (#664721): The two ends of a tooth, chosen per tooth.
+- **Gum** (#330A0D) and **Vein** (#751412): Dark gums, and the blood in the whites of the eyes.
+- **Milk Iris** (#B3BDB8): The clouded iris around a pinprick pupil.
 
 ### Neutral
-- **White You** (#FFFFFF): Your ink, and all interface text, icons, the printed label ring and the tonearm.
-- **Pale Reply** (#FBFFC2): Long reply text on the sleeve only: the reply's yellow calmed enough to read for a while (7.5:1 on cobalt).
-- **Muted Vinyl** (#7A0A1C): The record while the mic is muted, with the arm part lifted.
-- **Stuck Vinyl** (#15131A): The record in failure, with a cherry label. The window's only dark state.
-- **Hover Wash** (white at 18%): Hover behind icon buttons.
+- **Cold White** (#E9ECF1): Your words and ripples, and all interface text and symbols (16.9:1 on Void). It is deliberately not pure white.
+- **Hollow** (#040406): The ground when the mic is muted or the app is stuck. It is nearly indistinguishable from Void by colour, so those two states read from the face and the status word.
+- **Fog** (#8C96A8): The haze, the veil across the face, the wave's faint crest and the breath, all in the shader.
+- **Mist** (#A9B2C2): The colour of the control wisps. Rest is 17% (Wisp Rest), and firm is 30% (Wisp Firm). Both are masked by baked noise, so those are peaks, not flat fills.
+- **Cherry** (#B5122A): The Settings tint only, on sidebar symbols, system controls and the selected chip.
 
 ### Phase table
 
-| Status word | Vinyl | Label | Turns a second | Arm |
+| Status word | Dark | Eyes | Look | Frames a second |
 | --- | --- | --- | --- | --- |
-| Warming up, Ready | Cherry | Cobalt | 0 (coasts to a stop) | Parked |
-| Listening | Cherry | Cobalt | 0.12 | On the groove |
-| Mic muted | Muted Vinyl | Cobalt | 0.06 | Part lifted |
-| Hearing you | Cherry | Cobalt | 0.22 | On the groove |
-| Thinking | Cobalt | Cherry | 0.1 | Lifted |
-| Speaking | Cherry | Cobalt | 0.2 | On the groove |
-| Stuck | Stuck Vinyl | Cherry | 0 | Parked |
+| Warming up | Void | Shut | Sunk well back, ignores the pointer | 15 |
+| Ready | Void | Open | Faintest smile, lips just parted, teeth showing | 15 |
+| Listening | Void | Slightly wide | Brows a little up | 30 |
+| Mic muted | Hollow | A third open | One brow up, sunk back | 30 |
+| Hearing you | Void | Wide | Brows up, slight tilt | 30 |
+| Thinking | Oxblood | Rolled back | One brow up, sunk back | 15 |
+| Speaking | Void | Open | Follows the pointer at 60%, lips on the voice | 30 |
+| Stuck | Hollow | Nearly shut | Brows drooped, ignores the pointer, light at 55% | 15 |
 
-Every phase also has its status word, so colour and motion are never the only signal. Dragging the disc replaces the word with "Rewinding".
+Every phase has its status word, so colour and motion are never the only signal.
 
 ### Named Rules
 
-**The Whole Disc Rule.** A phase colour changes the entire vinyl, never a badge, dot or patch on it. The state should read from across the room.
+**The Whole Dark Rule.** A phase colour changes the entire ground, never a badge, dot or patch on it. The conversation's fog bank stays Void, so with it open only the band above the bank changes and the status word carries the phase.
 
-**The Two Inks Rule.** In grooves, spoken words and the cartridge, white is always you and yellow is always the reply. Yellow never carries interface text on the vinyl.
+**The Two Voices Rule.** Cold white is you and bone is the reply, in words and ripples alike. System messages on the stage are cold white. Bone's only other uses are transcript errors and the copied checkmark.
 
-**The Full Strength Rule.** Words on the vinyl are pure white or pure yellow at full opacity. Yellow on cherry reaches 4.3:1, so it is set at 21pt or larger; white on cherry reaches 4.7:1. The only lowered values are disabled controls (50 to 55%) and the empty type field's prompt (80%, at 22pt). A line you cut off is still drawn at 72% in the build, which falls to 2.7:1 on cherry: that is a defect to fix, not a state to copy.
+**The Cherry Stays Out Rule.** Cherry belongs to Settings. The stage's reds are flesh and the oxblood dark, and interface elements on the stage never use them.
 
 ## Typography
 
-**Display Font:** Avenir Next (with the system face for any other script)
-**Body Font:** Avenir Next on the stage; the system face in Settings forms
-**Label/Mono Font:** Avenir Next Condensed Heavy for status words and the printed label ring
+**Display Font:** Didot, as Didot-Italic for the status word
+**Body Font:** Avenir Next, medium
+**Label/Mono Font:** None
 
-**Character:** Sleeve lettering: heavy, geometric and slightly tight, printed rather than placed. The condensed stamp beside it reads like a pressing mark.
+**Character:** A high-contrast inscription over a plain, quiet sans. The large words read like something carved for the occasion, and the small ones stay out of the way.
 
 ### Hierarchy
-- **Words, large** (heavy, 34pt, -0.5pt tracking, 2pt tighter than natural leading): What is being said now, under 70 characters, and the empty-state invitation.
-- **Words, medium** (bold, 26pt, -0.2pt tracking, 1pt extra leading): Lines of 70 to 149 characters, and every system or error message.
-- **Words, small** (bold, 21pt, -0.2pt tracking, 1pt extra leading): Lines of 150 characters or more. Height caps at 190pt, newest words at the bottom; lines over 190 characters fade out through the top quarter of that block.
-- **Status stamp** (condensed heavy, 24pt): The one word naming the phase.
-- **Type field, pane title** (heavy, 22pt): The typed draft on the stage, and each Settings pane's name.
-- **Transcript** (16pt): Your lines heavy with 2pt extra leading, reply lines medium with 4pt extra leading.
-- **Action** (bold, 13pt): Underlined word controls and mic notices.
-- **Small print** (semibold, 12pt): The hint line and tool notes. The model menu and "You cut in here" use the same size in bold.
-- **Label ring** (condensed heavy, white, 3 units of kerning at 62 on a 768 unit texture): "SPEAK TO ME · model name", fitted to one lap of the label and spun with it.
-- **Puck** (condensed heavy, 13pt caption; semibold, 11pt snippet): The floating record's text.
+- **Words, large** (Didot regular, 34pt, 2pt extra leading, or 1pt on the empty-state invitation): What is being said now, under 70 characters, and the invitation.
+- **Words, medium** (Didot regular, 26pt, 2pt extra leading): Lines of 70 to 149 characters, and every system or error message.
+- **Words, small** (Didot regular, 21pt, 2pt extra leading): Lines of 150 characters or more. Height caps at 190pt with the newest words at the bottom, and lines over 190 characters fade out through the top quarter of that block.
+- **Status stamp** (Didot italic, 24pt): The one word naming the phase.
+- **Type field, pane title** (Didot regular, 22pt): The typed draft on the stage, and each Settings pane's name.
+- **Transcript** (Avenir Next medium, 16pt): Your lines with 2pt extra leading, reply lines with 4pt. Your lines differ from replies by colour and side, not weight.
+- **Error line** (Avenir Next medium, 14pt): Transcript errors, with a warning symbol.
+- **Action** (Avenir Next medium, 13pt): Words in wisps, and mic notices.
+- **Small print** (Avenir Next medium, 12pt): The hint line, tool notes, "You cut in here" and the model menu.
+- **Puck** (Didot italic, 13pt caption; Avenir Next medium, 11pt snippet): The floating face's text.
 
 ### Named Rules
 
-**The Whole String Rule.** Avenir Next has no Cyrillic, so any string containing an alphabetic character at or above U+0250 is set entirely in the system face at the same size and weight. Never let Avenir's punctuation mix into another script, and pass the string to the font choice wherever the text is user or model content.
+**The Inscription Rule.** Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in its two places, at 24pt on the stage and 13pt on the puck's backed mist.
 
-**The Size by Length Rule.** On the vinyl, text size follows length (34, 26, then 21pt) rather than role, so a short answer shouts and a long one still fits.
+**The Whole String Rule.** Didot and Avenir Next are Latin only, so any string containing an alphabetic character at or above U+0250 falls back whole to the system face at the same size, serif at 21pt and up. Never let their punctuation mix into another script, and pass the string to the font choice wherever the text is user or model content.
+
+**The Size by Length Rule.** On the stage, text size follows length (34, 26, then 21pt) rather than role, so a short answer is an inscription and a long one still fits.
 
 ## Layout
 
-The main window defaults to 520 by 800pt and stops at 440 by 640pt, with a hidden title bar. It is one composition, not a grid. The disc's centre sits at 46% of the height and horizontally centred; the disc bleeds past every edge. The label's radius is 13% of the window's long side, capped at 150pt (104pt at the default size). The first groove starts 14pt outside it, with 9pt between grooves.
+The main window defaults to 520 by 800pt and stops at 440 by 640pt, with a hidden title bar. It is one composition, not a grid. The head hangs horizontally centred, 478 units tall, at up to 1 unit per point at the default width and at most 1.45. It takes the room between 44pt from the top and 12pt above the words, placed 42% of the way down the spare space. As the words block grows from 130 to 300pt the head draws back to 78% as well as rising, easing into place rather than snapping.
 
-Content hangs on a 22pt margin. The top bar is 30pt tall and shares the traffic lights' row, with 76pt reserved at its leading edge. The status word sits 8pt below it. The words sit at the bottom left in a block up to 620pt wide (560pt when empty), with 12pt above the control row, and 16pt of margin below the small print. Controls in a row sit 18pt apart.
+Content hangs on a 22pt margin. The top bar is 30pt tall and shares the traffic lights' row, with 76pt reserved at its leading edge and 10pt at its trailing edge. The status word sits 8pt below it, in the free dark at top left. The words sit at the bottom left in a block up to 620pt wide (560pt when empty), 18pt above the dock, with 16pt below the small print. The dock is inset a further 6pt and holds its action row 11pt above the hint. Wisps in a row sit 26pt apart, and suggested prompts 24pt.
 
-Opening the conversation slides the sleeve up from the bottom edge to 130pt from the top. The disc rides up to centre on that edge at half size, half in the sleeve like a record being put away, and the arm fades out. In the transcript, your lines sit right in up to 400pt, replies sit left in up to 480pt, and rows are 18pt apart.
+Opening the conversation brings the fog bank up from the bottom edge to 170pt from the top. The head shrinks to fit the band above it, centred, 134pt tall from 36pt down, and still talks; its ripples fade out as it shrinks. Your lines sit right in up to 400pt, replies sit left in up to 480pt, and rows are 18pt apart.
 
-Settings is fixed at 720 by 560pt with a 190pt sidebar and a 28pt header margin. The floating record is a 200 by 230pt transparent panel with a 150pt disc, 3.4pt groove pitch, no arm and no printed label.
+Settings is fixed at 720 by 560pt with a 190pt sidebar and a 28pt header margin. The floating face is a 200 by 230pt transparent panel with a 150pt head and its text below.
 
 ## Elevation & Depth
 
-The interface is flat: no cards, panels, blurs or drop shadows on text or controls. Depth belongs to the record. Two fixed wedges of warm light sit across the grooves and stay put while the disc turns, hot grooves glow slightly into the vinyl around them, and the wavefront lifts the grooves and catches the light as it passes. The sleeve is a flat colour field that covers the disc with a hard edge.
-
-### Shadow Vocabulary
-- **Tonearm shadow** (black at up to 34%, offset 3 by 5pt, soft over 9pt; offset and softness grow as the arm lifts, to about 2.8 times the offset and 15pt at Thinking's lift): The stage's only shadow. It is computed in the shader, and it is how a lifted arm reads as lifted.
-- **App icon tile** (black at 35%, 14pt down, 28pt blur): The icon's standard macOS tile shadow only.
+There are no drop shadows, cards, blur panels or glass anywhere on the stage. Depth comes from fog in planes, painted back to front: the dark, haze thickening towards the bottom, the head, a veil of fog drifting across the face, voice ripples that thin out as they reach it, the eyes, and the falling breath. Each plane drifts at its own slow speed, so the room has depth while almost nothing moves. Interface text sits on top, and the dark calms behind it: ripples, breath and the wave's crest fall to 20% over a 70pt ramp above the words and to 12% behind the top bar, and the haze falls by about half. The head's own relief comes from a normal-lit height field, with sockets, nostrils and throat falling away into real dark.
 
 ### Named Rules
 
-**The Tonearm Rule.** The arm is the only object that floats above the record. Interface elements stay printed on it.
+**The One Side Rule.** The key light comes from the upper left and leaves the far half of the face in shadow. The only other light is a faint cold fill from below, so the shadows never go quite flat. Never add a second key or a rim.
+
+**The Eyes Look Through Rule.** The eyes are drawn in front of the fog and the ripples. Whatever else the fog hides, it never covers the gaze.
+
+**The Dissolving Edge Rule.** The head has no outline. It ends where its height falls into the noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.
 
 ## Shapes
 
-Two forms carry the system: true circles for the record and square-cornered blocks for everything laid over it. Hover and on states on the stage are hard rectangles, and so are the floating record's caption strips. The tonearm is a thin rod with a round hub and a capsule cartridge. The top bar's icon hover is the one soft corner on the stage (6pt). Settings uses native macOS corners, with 6pt key caps, 8pt text areas and fully rounded personality chips.
+The stage has no corners and no drawn containers. Its forms are organic: a slightly askew head, lips that taper to points with a dip at the centre, teeth that come to points or snap off, and irregular wisps that trail off in strands. Ripples are the one geometric form, evenly spaced around the mouth, and even they bend with the voice's loudness. The fog bank's top edge is a soft fade over 3% of its height. Settings uses native macOS corners, with 6pt key caps, 8pt text areas and fully rounded personality chips.
 
 ## Components
 
-### The Record
-The signature component and the only stage graphic: one fragment shader reading a 64-turn window of two-byte groove samples (level and owner).
-- **Grooves:** Uncut grooves are hairlines of the vinyl colour at 58% brightness. Cut grooves carry their owner's ink. A groove's heat decays with age over about 9 turns, so its swing and width shrink as it moves outward; it holds full colour for about 6 turns, then sinks to 22% strength by about 19.
-- **Voice:** The level comes from the actual mic or speaker signal, over a noise floor, with a fast attack and slow release. Each groove leans 30% on the turn before it, so neighbours nest instead of crossing. Saved or typed lines with no audio are cut from the rhythm of their words.
-- **Hush:** Under the words, grooves fall to 20% strength over a 70pt ramp that follows the height of the text.
-- **Label:** Printed white ring that spins with the disc, and a yellow spindle.
-- **Tonearm:** White rod and hub hanging from the top right, with a hub centre in the label colour. The cartridge is white, or yellow while a reply is being cut. The head jitters very slightly with the voice level.
-- **Scratching:** Dragging around the disc rewinds at 6 turns per lap, shows the line under the head, and springs back on release.
-- **Cost:** 30 frames a second while active and 20 while idle. It pauses 3 seconds after going idle, and whenever the window is hidden or covered.
-- **Reduce Motion:** The disc holds still, grooves step out once a turn, colours change without a wavefront, and level-driven shiver and jitter stop.
+### The Apparition
+The signature component and the only stage graphic: one fragment shader, a 256-square tiling noise and a two-channel sound history.
+- **Lips:** Three live bands of the reply's voice drive them. Loudness opens the jaw, the balance of low to middle frequencies rounds or stretches the lips against this voice's own average, and a hiss closes the jaw by up to 65%. The jaw opens fast and closes a little slower. The upper lip barely moves.
+- **Mouth:** Thin cracked lips around wet flesh, a black throat, a tongue lying low and dark gums. Teeth stay the same size however far it opens, so the lips reveal them. Each is its own length and lean, and about one in eight is missing and about one in three snapped.
+- **Eyes:** Hollow sockets, heavy lids, bloodshot whites, a milky iris and a pinprick pupil. Gaze eases slowly to the pointer anywhere on screen, or to random glances once the pointer has been still for 20 seconds. Blinks come every 4 to 11 seconds, and on most phase changes. While thinking they roll back.
+- **Breath:** Cold mist falling from the mouth, only as strong as the voice. Stage only.
+- **Ripples:** Voices disturb the fog at 30% strength, 42 units apart, carrying about four seconds of sound. The reply's move out from the mouth in bone and yours close in on it in cold white. Stage only.
+- **The lurch:** Talking over a reply throws the head about 10% towards you, flares the eyes, lifts the brows and shuts the mouth, and it settles over about a second. It comes with the strongest wave.
+- **Dozing off:** After 40 seconds in Ready with nobody around, the eyes close and the head sinks back, and at 45 seconds drawing stops. Loading and Stuck stop at 45 seconds without that fade. The pointer wakes it.
+- **Cost:** 30 frames a second while listening, hearing or speaking, and 15 otherwise. It also pauses whenever the window is hidden or covered.
+- **Reduce Motion:** The fog holds still and the tilt and bob stop, with no ripples, waves, breath or lurch. Lips, blinks and gaze keep working, because they carry meaning.
 
-**The Hot Groove Rule.** Only the groove being cut stands out. Anything older must cool into the vinyl, so the disc stays calm however long the talk runs.
+**The Real Voice Rule.** Lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.
 
-**The One Front Rule.** One wavefront crosses the disc at a time, at 1400pt a second from the centre, with the new colour inside it and the old one outside. A vinyl or label colour change strikes at full strength, entering hearing or speaking from a calm phase strikes at 0.6, and cutting into a reply strikes at 2.4 with no colour change. Phase changes that alter neither colour nor strike state send nothing.
+**The One Wave Rule.** A phase change sends one dark wave from the mouth at 1400pt a second, with the new dark inside and the old outside and a soft 52pt edge. A change of ground strikes at full strength, entering hearing or speaking at 0.6, and cutting in at 2.4 with no change of colour. A new wave replaces the last.
 
-### Text Action
-The standard control on the stage: no box, just the word.
-- **Style:** Bold 13pt white, underlined, with an optional 11pt symbol before it. It keeps a 26pt tall hit area.
-- **Hover:** A white rectangle behind it, cherry text, underline removed.
-- **Disabled:** 55% opacity.
-- **Uses:** Type, Conversation with its count, Stop reply, Mute mic, Mute replies, Try again, Hide, Send, Back and the suggested prompts.
+### Wisp Action
+The standard control on the stage: a word in a thin wisp of mist.
+- **Style:** Avenir Next medium 13pt cold white, with an optional 11pt symbol before it, in a 26pt tall hit area. The wisp spills 22 by 13pt past the control, at 17%, and drifts by a couple of points.
+- **Hover:** The wisp condenses to a tighter, firmer puff at 30%, scaled 4% larger, over 0.22 seconds.
+- **Click:** Three wisps scatter outward and thin away over 0.55 seconds.
+- **Disabled:** 55% opacity (4.9:1 on its wisp).
+- **Uses:** Type, Conversation with its count, Stop reply, Mute mic, Mute replies, Try again, Hide, Send, Back and the suggested prompts. The dock shows the one side action that matters right now.
 
-**The Word Is the Control Rule.** Stage controls are underlined words. Icon-only buttons are kept to the top bar, the actions under a reply and the composer toggles. Nothing on the stage is a filled or pill-shaped button.
+**The Mist Control Rule.** Stage controls are words in mist, with no fill, border or edge you could trace. Hovering makes the mist thicken, and nothing else about the word changes.
 
 ### Whole Window Control
 Clicking anywhere on the stage starts or stops talking, with a link pointer and an accessibility button action. Space does the same. Controls sit above this layer, and static text lets clicks through.
 
-**The No Mic Button Rule.** Talking starts from a click on the window or floating record, Space, the global shortcut or the menu bar item, never from a dedicated button in the window. Mute mic is a word, and it appears only once the mic is on.
+**The No Mic Button Rule.** Talking starts from a click on the window or floating face, Space, the global shortcut or the menu bar item, never from a dedicated button in the window. Mute mic is a word, and it appears only once the mic is on.
 
 ### Icon Buttons
-- **Top bar:** Bold 13pt white symbols in 28 by 24pt. Hover is the wash; disabled is 50%.
-- **Reply actions:** Bold 11pt symbols in 24 by 22pt, with a square wash on hover. They show on the latest reply and on hover for older ones. A completed copy flashes a yellow checkmark for 1.2 seconds.
-- **Composer toggles:** 28pt square. On is a solid white square with a cherry icon.
+Bare until you reach them, then a puff of mist.
+- **Top bar:** Bold 13pt symbols in 28 by 24pt, with a firm puff on hover. Disabled is 50%.
+- **Reply actions:** Bold 11pt symbols in 24 by 22pt, with a firm puff on hover. They show on the latest reply and on hover for older ones. A completed copy flashes a bone checkmark for 1.2 seconds.
+- **Composer toggles:** 28pt square, with the symbol at 55% at rest. Hover is a puff at 70% strength with a full symbol, and on is the full firm puff.
+
+### Model Menu
+Small print with a small chevron in the top bar, truncated in the middle at 190pt. It has no box and no hover state, and opens a native menu.
 
 ### Inputs / Fields
-The type field replaces the control row: heavy 22pt white on the vinyl, with no box, sitting on a 2pt solid white rule. The prompt is white at 80%. Return sends and Esc goes back to voice.
+The type field replaces the action row: Didot 22pt cold white on a firm puff that spills 12pt, up to four lines. The prompt is cold white at 70% (5.6:1 on the puff). Return sends and Esc goes back to voice. Clicking away from an empty field also goes back.
 
-### The Sleeve
-The conversation as a flat cobalt field that springs up over the record (0.55 seconds, slight bounce). It holds the status word, a Hide action, a scrolling transcript and the same control row. Your lines are heavy white on the right, with words still being heard at 80%; replies are medium pale yellow on the left, with no bubbles. Cut-off replies drop to 82% with a "You cut in here" scissors note; tool and screen notes use small print with a symbol. New rows fade up 12pt in 0.25 seconds, and the transcript fades out over its top 5%.
+### The Fog Bank
+The conversation, rolling up as a bank of Void over the lower window (0.55 second spring, slight bounce), with a soft top edge. It holds the status word, a Hide wisp, a scrolling transcript and the same dock. There are no bubbles. Your lines are cold white on the right, with words still being heard at 80%. Replies are long bone on the left, and cut-off replies drop to 82% (9:1) with a "You cut in here" scissors note. Tool and screen notes use small print with a symbol. New rows fade up 12pt in 0.25 seconds, and the transcript fades out over its top 5%.
 
-### Floating Record
-A whole small disc on a transparent, always-on-top panel, sharing the main window's engine, so it shows the same grooves. Click starts or stops; dragging moves it. Text can't print on the vinyl here because the desktop sits behind it, so the caption and snippet sit on square strips filled with the current vinyl colour.
+### Floating Face
+The head alone on a transparent, always-on-top panel with no window shadow, sharing the main window's engine, so it says the same things. Its edges dissolve into the desktop rather than into a dark. Click starts or stops, dragging moves it, and right-click opens a menu. Light text can't sit on an unknown desktop, so the caption and the 2-line snippet of the last 90 characters sit on firm mist with a darkened mist layer behind.
 
 ### Settings
 Native macOS, in the style of System Settings: a sidebar of panes and grouped forms on the system window background, following the system appearance.
 - **Sidebar:** Standard list, with every symbol in cherry.
-- **Header:** Pane name in heavy 22pt Avenir Next, with a callout line of explanation below in secondary.
-- **Controls:** System toggles, sliders, pickers and buttons, tinted cherry. Sliders carry words at each end and the value on the right.
-- **Personality chips:** Fully rounded 26pt tall chips, filled cherry with white text when selected. The world's no-pill rule covers the stage, not this pane.
+- **Header:** Pane name in Didot 22pt, with a callout line of explanation below in secondary.
+- **Controls:** System toggles, sliders, pickers and buttons, tinted cherry.
+- **Personality chips:** Fully rounded 26pt tall chips, filled cherry with white text when selected, and primary at 7% otherwise. The no-pill stance covers the stage, not this pane.
 
-**The Native Settings Rule.** Settings is where the app stops performing. Add the cherry tint and the display-face header, and leave the rest to the system.
-
-### App Icon
-The record at rest, on a standard macOS tile (824 units on a 1024 canvas, 186 unit corner): cherry ground, concentric dark grooves, one yellow and one white wave around a cobalt label, and a yellow spindle. Yellow runs outside white.
+**The Native Settings Rule.** Settings is where the app stops performing. Add the cherry tint and the Didot header, and leave the rest to the system. The past-conversations popover and the menus stay native too.
 
 ### Motion
-Words change with a fade and a 12pt rise over 0.25 seconds. Status words crossfade over 0.2 seconds, and the control row over 0.18 seconds. Everything on the record comes from rotation, groove age and the wavefront rather than added animation.
+Slow easing and small distances throughout the interface. Words change with a fade and a 12pt rise over 0.25 seconds, status words crossfade over 0.2 seconds, and the action row over 0.18 seconds. Everything on the head comes from the engine rather than added animation.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** derive every moving part of the stage from the record's one mechanism: rotation, groove age and the wavefront.
-- **Do** drive grooves from the sound actually happening, in the owner's ink.
-- **Do** change state by changing the whole vinyl, and pair it with its status word.
-- **Do** set text straight on the vinyl in pure white or yellow, with the grooves hushed behind it.
+- **Do** drive lips and ripples from the sound actually happening, in the owner's ink.
+- **Do** change state by changing the whole dark or the face, and pair it with its status word.
+- **Do** keep the head real, askew and lit from one side, dissolving at its edges.
+- **Do** set stage text straight on the dark, with the fog calmed behind it.
+- **Do** make a new stage control a word in a wisp of mist.
 - **Do** use the system face for the whole string when text contains any non-Latin script.
-- **Do** make a new stage control an underlined word (Text Action).
-- **Do** keep Settings native, adding only the cherry tint and the pane header.
-- **Do** respect Reduce Motion and pause drawing when idle or hidden: the language model needs the GPU.
+- **Do** keep Settings native, adding only the cherry tint and the Didot pane header.
+- **Do** respect Reduce Motion and stop drawing when idle or hidden: the language model needs the GPU.
 
 ### Don't:
-- **Don't** add a glowing orb or blob, or a round mic button.
-- **Don't** put cards, pills or glass on the stage. The floating record's strips exist only because it has no vinyl beneath its text.
-- **Don't** add shadows to text or controls. The tonearm's shadow is the record's own.
-- **Don't** set yellow text on cherry below 21pt.
-- **Don't** dim words on the vinyl to show hierarchy; change size or weight, or move them to the sleeve.
-- **Don't** let old grooves stay bright, or add a second concurrent wavefront.
+- **Don't** add a glowing orb or blob, a friendly avatar, or a round mic button.
+- **Don't** make it cute or cartoonish: the owner rejected the cloud as childish.
+- **Don't** put cards, pills, glass or hard-edged containers on the stage.
+- **Don't** add shadows to text or controls.
+- **Don't** use cherry on the stage, or set interface elements in the flesh reds.
+- **Don't** set roman Didot below 21pt.
+- **Don't** add a second key light, or a second concurrent wave.
+- **Don't** make the head or the fog move fast: besides the voice-driven lips and blinks, only the lurch and the wave are quick.
 - **Don't** add a button to start talking.

@@ -10,12 +10,12 @@ enum Mist {
     /// `firm` is the condensed puff under the pointer, with a tighter edge.
     static func puff(width: CGFloat, height: CGFloat, firm: Bool, seed: Int) -> CGImage? {
         let aspect = min(12, max(1, (width / max(height, 1)).rounded()))
-        let key = "\(aspect)-\(firm)-\(seed % 3)"
+        let key = "\(aspect)-\(firm)-\(seed % 7)"
         if let image = baked[key] { return image }
         let h = 96, w = Int(CGFloat(h) * aspect)
         let noise = CloudNoise.pixels, size = CloudNoise.size
         let soft = firm ? 0.3 : 0.5
-        let offset = seed % 3 * 83
+        let offset = seed % 7 * 37
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         for y in 0..<h {
             for x in 0..<w {
@@ -26,13 +26,15 @@ enum Mist {
                 let dist = (dx * dx + dy * dy).squareRoot()
                 // Read gently, so edges billow and thin out rather than tear.
                 let n = Double(noise[(y + offset) % size * size + (x + offset) % size]) / 255
-                let field = dist + (n - 0.5) * (firm ? 0.22 : 0.5)
-                let core = min(1, max(0, (0.92 - field) / soft))
-                // A thin haze reaches further out than the body of the puff.
-                let haze = min(1, max(0, (1.0 - dist) / 0.45)) * (firm ? 0.25 : 0.45) * min(1, n * 1.5)
+                // Strands stretched along its length, so it trails away instead of ending in a capsule.
+                let strand = Double(noise[(y * 3 + offset * 2) % size * size + (x / 3 + offset) % size]) / 255
+                let field = dist + (n - 0.5) * (firm ? 0.4 : 0.8) + (strand - 0.5) * (firm ? 0.25 : 0.5)
+                let core = min(1, max(0, (0.82 - field) / soft))
+                let body = core * core * (3 - 2 * core) * (firm ? 0.8 + strand * 0.3 : 0.5 + strand * 0.8)
+                let tails = min(1, max(0, (1.0 - dist) / 0.5)) * max(0, strand - 0.42) * (firm ? 0.7 : 1.3)
                 // Always gone before the edge of the image, however the noise falls.
                 let rim = min(1, max(0, (1 - dist) / 0.14))
-                let a = UInt8(max(core * core * (3 - 2 * core), haze) * rim * 255)
+                let a = UInt8(min(1, max(body, tails)) * rim * 255)
                 let i = (y * w + x) * 4
                 pixels[i] = a; pixels[i + 1] = a; pixels[i + 2] = a; pixels[i + 3] = a
             }
@@ -60,7 +62,9 @@ struct MistBackground: View {
     var burst = 0
     var seed = 0
     /// How far the mist reaches past the control's edges.
-    var spill = CGSize(width: 18, height: 12)
+    var spill = CGSize(width: 22, height: 13)
+    /// Over a desktop rather than the dark: a darker layer behind, so light words stay readable.
+    var backed = false
     @Environment(\.mistDrifts) private var drifts
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -71,6 +75,7 @@ struct MistBackground: View {
             TimelineView(.animation(minimumInterval: 1.0 / 10, paused: still)) { _ in
                 let t = still ? 0 : Date.timeIntervalSinceReferenceDate + Double(seed) * 2.3
                 ZStack {
+                    if backed { puff(width: width, height: height, firm: true).colorMultiply(Mood.void.color()).brightness(-0.6) }
                     puff(width: width, height: height, firm: false).opacity(firm ? 0 : 0.17)
                     puff(width: width, height: height, firm: true).opacity(firm ? 0.3 : 0)
                 }

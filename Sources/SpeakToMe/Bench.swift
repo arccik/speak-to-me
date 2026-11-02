@@ -60,9 +60,12 @@ enum UIBench {
 @MainActor
 enum UIDrive {
     private static var directory = ""
+    /// A driven run keeps drawing even if macOS says the window is covered (say, the display slept).
+    static var isRunning = false
 
     static func run(to path: String) async {
         directory = path
+        isRunning = true
         let session = VoiceSession.shared
         for _ in 0..<300 where session.phase != .ready { try? await Task.sleep(for: .milliseconds(200)) }
         report("booted")
@@ -105,9 +108,9 @@ enum UIDrive {
         session.lines.append(.init(role: "assistant", text: "Most people take about a week, to give the body time to adjust to the"))
         await play(.speaking, seconds: 7) { session.levels.speaker = $0 }
         // Mid-syllable, so the picture shows the lips at work.
-        for _ in 0..<200 where FaceEngine.shared.jaw < 0.25 {
-            await play(.speaking, seconds: 0.03) { session.levels.speaker = $0 }
-        }
+        session.levels.speaker = 0.8
+        session.levels.speakerBands = SIMD3(0.14, 0.05, 0.004)
+        try? await Task.sleep(for: .milliseconds(350))
         capture(window, "4-speaking")
         print("DRIVE speaking jaw=\(FaceEngine.shared.jaw) wide=\(FaceEngine.shared.wide)")
         session.lines[session.lines.count - 1].text = String(repeating: "Most people take about a week, to give the body time to adjust. ", count: 4)

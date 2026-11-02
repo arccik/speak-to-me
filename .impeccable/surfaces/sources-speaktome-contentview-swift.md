@@ -9,9 +9,9 @@ Scope: the main window of Speak to Me, plus the floating face. Mode: Experience.
 
 ## Direction contract
 
-THESIS: A pale face pressing through black fog, watching you, speaking. Its lips follow the actual voice; its mouth opens onto nothing. It refuses the category's glowing blob, round mic button and friendly avatar.
-OWN-WORLD: Near-black cold ground (#07080C), grey fog, bone-grey relief lit from one side, two cold points of light in hollow sockets. Oxblood dark (#2C060C) for thinking. Bone (#D8CFA8) for reply words, cold white for yours. Didot at display sizes, Avenir Next medium small. Controls are thin wisps of mist, no pills or glass.
-STORY: The eyes find your pointer. Click anywhere; your voice closes in as faint ripples. It sinks back under a red dark while thinking, then speaks, cold breath falling from its mouth. Talk over it and it lurches at you, eyes flaring. Left alone it fades away and drawing stops.
+THESIS: A wasted, real-looking face emerging from black fog, watching you, speaking. Its lips follow the actual voice; its mouth opens too far on crooked, rotten teeth. It refuses the category's glowing blob, round mic button and friendly avatar.
+OWN-WORLD: Near-black cold ground (#07080C), grey fog, bone-grey relief lit from one side, wet bloodshot eyes with milky irises and pinprick pupils in hollow sockets, stained pointed teeth in dark gums. Oxblood dark (#2C060C) for thinking. Bone (#D8CFA8) for reply words, cold white for yours. Didot at display sizes, Avenir Next medium small. Controls are thin wisps of mist, no pills or glass.
+STORY: The eyes find your pointer. Click anywhere; your voice closes in as faint ripples. Its eyes roll back under a red dark while thinking, then speaks, cold breath falling from its mouth. Talk over it and it lurches at you, eyes flaring. Left alone it fades away and drawing stops.
 FIRST VIEWPORT: Head centred and hanging, dissolving at its edges, with the top-left dark free for the status word in Didot italic. Words 34pt bottom-left. Wisps below. As words grow the head rises and shrinks.
 FORM: The Apparition, an owner-pinned steer of The Wind Head. seed:8f5472a16b62176f
 Signature interaction: lip sync from three live voice bands; slow eyes that follow the pointer everywhere. Motion grammar: almost still, slow drift; one dark wave leaves the mouth per phase change; only the lurch is fast.

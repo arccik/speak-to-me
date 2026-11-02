@@ -59,11 +59,11 @@ private struct MiniOrbView: View {
                 .contentShape(Circle())
                 .onTapGesture { if session.canToggle { session.toggle() } }
             Text(caption)
-                .font(.stamp(13))
+                .font(.display(12))
                 .foregroundStyle(Theme.ink)
                 .padding(.horizontal, 8)
                 .frame(height: 20)
-                .background(MistBackground(firm: true, seed: 1))
+                .background(MistBackground(firm: true, seed: 1, backed: true))
                 .padding(.top, 6)
             if let snippet {
                 Text(snippet)
@@ -73,7 +73,7 @@ private struct MiniOrbView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(MistBackground(firm: true, seed: 2, spill: CGSize(width: 8, height: 7)))
+                    .background(MistBackground(firm: true, seed: 2, spill: CGSize(width: 16, height: 12), backed: true))
                     .padding(.top, 8)
             }
             Spacer(minLength: 0)

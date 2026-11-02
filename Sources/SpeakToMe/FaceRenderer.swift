@@ -204,7 +204,9 @@ final class FaceRenderer {
         let height = cloudAbove + cloudBelow
         let top = 44 * s
         let room = max(h - Double(layout.hush) * s - top - 12 * s, 200 * s)
-        let unit = min(w / 520, room / height, 1.45 * s)
+        // Besides rising, it draws back as the words grow.
+        let distance = 1 - 0.22 * min(1, max(0, (Double(layout.hush) - 130) / 170))
+        let unit = min(w / 520, room / height, 1.45 * s) * distance
         let y = top + cloudAbove * unit + (room - height * unit) * 0.42
         let smallUnit = (sleeveTop - 36) * s / height
         let smallY = 36 * s + cloudAbove * smallUnit
@@ -360,19 +362,33 @@ final class FaceRenderer {
         return a * exp(-dot(d, d));
     }
 
-    /// The shape of the head, as if it were pushing through a sheet of fog: how far each point
-    /// stands out. The left and right of the face mirror each other.
+    static float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+
+    /// The shape of the head: how far each point stands out, from skull to creases.
+    /// The left and right of the face mirror each other, with a rounded seam down the middle.
     static float relief(float2 f, constant FaceUniforms &u, float2 mouth, float2 mouthSize) {
-        float2 a = float2(sqrt(f.x * f.x + 90), f.y); // rounded through the middle, so no crease
+        float2 a = float2(sqrt(f.x * f.x + 40), f.y);
         float lift = mix(u.browLeft, u.browRight, smoothstep(-40.0, 40.0, f.x));
-        float h = bump(f, float2(0, -10), float2(138, 196), 1);
-        h += bump(a, float2(50, -78 - lift * 9 + (a.x - 50) * u.browTilt * 0.25), float2(50, 15), 0.15);
-        h -= bump(a, float2(58, -40), float2(33, 25), 0.42);
-        h += bump(f, float2(0, -5), float2(12, 52), 0.15) + bump(f, float2(0, 40), float2(16, 13), 0.17);
-        h += bump(a, float2(84, 22), float2(36, 20), 0.11) - bump(a, float2(84, 78), float2(28, 36), 0.13);
-        h += bump(f, float2(0, 168), float2(40, 28), 0.14);
-        h += bump(f, mouth, mouthSize + float2(13, 11), 0.1);
-        h -= bump(f, mouth, mouthSize * 0.85 + float2(0, 1), 0.1 + 0.25 * u.jaw);
+        float drop = u.jaw * 30;
+        float h = bump(f, float2(0, -10), float2(132, 192 + drop * 0.5), 1);
+        h -= bump(a, float2(122, -70), float2(26, 46), 0.16); // temples
+        h += bump(a, float2(52, -84 - lift * 9 + (a.x - 50) * u.browTilt * 0.25), float2(46, 12), 0.2); // brow ridge
+        h -= bump(a, float2(13, -70), float2(5, 16), 0.05); // the frown between the brows
+        h -= bump(a, float2(58, -46), float2(31, 21), 0.5); // sockets
+        h += bump(a, float2(58, -46), float2(19, 10), 0.13); // the eyeball under the lids
+        h += bump(a, float2(60, -17), float2(27, 7), 0.05) - bump(a, float2(50, -26), float2(25, 5), 0.05); // bags and troughs
+        h += bump(f, float2(0, -20), float2(10, 42), 0.14) + bump(f, float2(0, 34), float2(13, 11), 0.2); // bridge and tip
+        float2 sides = float2(abs(f.x), f.y);
+        h += bump(sides, float2(16, 40), float2(8, 7), 0.08) - bump(sides, float2(9.5, 47), float2(4.5, 3), 0.13); // wings and nostrils
+        h -= bump(f, float2(0, 66), float2(3.5, 10), 0.03); // philtrum
+        h += bump(a, float2(88, 12), float2(30, 15), 0.17) - bump(a, float2(84, 68 + drop * 0.3), float2(26, 38), 0.25); // cheekbones and hollows
+        // The crease from the nose to the corner of the mouth.
+        float2 fold = a - float2(22, 44), along = float2(mouthSize.x + 8, mouth.y - 44) - float2(22, 0);
+        float crease = length(fold - along * saturate(dot(fold, along) / dot(along, along)));
+        h -= 0.03 * exp(-crease * crease / 70);
+        h += bump(f, float2(0, 172 + drop), float2(34, 20), 0.16) + bump(a, float2(96, 150 + drop * 0.6), float2(22, 40), 0.05); // chin and jaw
+        h += bump(f, mouth, mouthSize + float2(9, 7), 0.06);
+        h -= bump(f, mouth, mouthSize * 0.85 + float2(0, 1), 0.08 + 0.3 * u.jaw);
         return h;
     }
 
@@ -380,8 +396,8 @@ final class FaceRenderer {
     static float ring(float distance, float theta, float loud, float travel, float time, float aa) {
         float bent = distance + loud * 11 * sin(theta * 7 + distance * 0.03 - time * 2.2);
         float gap = abs(fract(bent / 42 - travel) - 0.5) * 42;
-        float width = 0.7 + loud * 2.6;
-        return (1 - smoothstep(width - aa, width + aa, gap)) * smoothstep(0.03, 0.2, loud);
+        float width = 0.8 + loud * 3.4;
+        return (1 - smoothstep(width * 0.2, width + 3.5, gap)) * smoothstep(0.03, 0.25, loud);
     }
 
     fragment float4 faceFragment(float4 position [[position]], constant FaceUniforms &u [[buffer(0)]],
@@ -427,109 +443,177 @@ final class FaceRenderer {
 
         // The head: lit from one side, dissolving at its edges, sinking back while it thinks or sleeps.
         float wideness = u.wide;
-        float mouthW = 40 + 17 * wideness + u.jaw * 4;
-        float mouthH = 1.7 + u.jaw * (42 - 15 * max(wideness, 0.0) - 8 * max(-wideness, 0.0));
+        float mouthW = 42 + 17 * wideness + u.jaw * 5;
+        // It opens further than a jaw should.
+        float mouthH = 1.7 + u.jaw * (58 - 22 * max(wideness, 0.0) - 12 * max(-wideness, 0.0));
         // The upper lip barely moves; the jaw does the opening.
-        float2 mouthCentre = mouthAt + float2(0, mouthH * 0.75);
+        float2 mouthCentre = mouthAt + float2(0, mouthH * 0.65);
         float2 mouthSize = float2(mouthW, mouthH);
 
         float visible = 0;
+        // No real face is symmetrical: this one is slightly askew, one eye lower than the other.
+        float2 w = f + float2(sin(f.y * 0.017 + 1.3) * 5, sin(f.x * 0.021) * 3 + f.x * 0.035);
         if (abs(f.x) < 290 && abs(f.y) < 330) {
-            float h = relief(f, u, mouthCentre, mouthSize);
-            float2 slope = float2(relief(f + float2(3, 0), u, mouthCentre, mouthSize) - h,
-                                  relief(f + float2(0, 3), u, mouthCentre, mouthSize) - h) / 3;
-            float3 normal = normalize(float3(-slope * 74, 1));
-            float diffuse = saturate(dot(normal, normalize(float3(-0.38, -0.72, 0.58))));
-            float tone = 0.06 + 0.98 * pow(diffuse, 1.7);
-            tone *= 0.86 + (noise.sample(tile, f / 300 + float2(u.time * 0.007, 0)).r - 0.5) * 0.3;
+            float h = relief(w, u, mouthCentre, mouthSize);
+            float2 slope = float2(relief(w + float2(3, 0), u, mouthCentre, mouthSize) - h,
+                                  relief(w + float2(0, 3), u, mouthCentre, mouthSize) - h) / 3;
+            // Skin: pores and blotches from the noise, and lines across the forehead.
+            float pore = noise.sample(tile, f / 90).r;
+            float lump = noise.sample(tile, f / 340).r;
+            slope += float2(noise.sample(tile, (f + float2(14, 0)) / 340).r - lump,
+                            noise.sample(tile, (f + float2(0, 14)) / 340).r - lump) * 0.012;
+            float lines = smoothstep(-175.0, -130.0, f.y) * (1 - smoothstep(-112.0, -90.0, f.y)) * (1 - smoothstep(60.0, 110.0, abs(f.x)));
+            slope.y += cos(f.y * 0.3 + big * 14 + f.x * f.x * 0.0006) * 0.0016 * lines;
+            float3 normal = normalize(float3(-slope * 88, 1));
+            float3 toLight = normalize(float3(-0.8, -0.42, 0.44)); // from one side, leaving the far half in shadow
+            float diffuse = saturate(dot(normal, toLight));
+            float tone = 0.045 + 1.02 * pow(diffuse, 1.6);
+            // A little colder light from below, so the shadows never quite go flat.
+            float under = saturate(dot(normal, float3(0.2, 0.8, 0.55)));
             // The sockets fall away into real dark.
-            float2 mirrored = float2(abs(f.x), f.y);
-            tone *= 1 - bump(mirrored, float2(58, -47), float2(31, 22), 0.92);
-            // A little colder light from below, so the sockets never quite go flat.
-            tone += 0.05 * saturate(dot(normal, float3(0.2, 0.8, 0.55)));
-            float3 skin = float3(0.74, 0.77, 0.81) * tone * u.cloudLight;
-            visible = smoothstep(0.08, 0.46, h + (big - 0.5) * 0.3) * (1 - u.thought * 0.62);
+            float2 wm = float2(abs(w.x), w.y);
+            tone *= 1 - bump(wm, float2(58, -47), float2(32, 22), 0.62);
+            tone *= 1 - bump(wm, float2(9.5, 47), float2(5, 3.4), 0.95); // the nostrils stay black
+            tone *= 0.88 + (pore - 0.5) * 0.4;
+            float blotch = noise.sample(tile, f / 620 + float2(3.1, 0.7)).r;
+            float3 flesh = mix(float3(0.66, 0.62, 0.55), float3(0.47, 0.41, 0.42), smoothstep(0.32, 0.8, blotch));
+            // Waxy sheen where the light glances off.
+            float sheen = pow(saturate(dot(normal, normalize(toLight + float3(0, 0, 1)))), 34.0);
+            float3 skin = (flesh * tone + float3(0.06, 0.08, 0.1) * under + float3(0.26, 0.26, 0.25) * sheen) * u.cloudLight;
+            visible = smoothstep(0.1, 0.36, h + (big - 0.5) * 0.2) * (1 - u.thought * 0.5);
             color = mix(color, skin, visible);
 
             // The mouth: lips around a dark cavity, teeth that stay the same size however
             // far it opens, so the lips and jaw reveal them rather than stretch them.
             float2 m = f - mouthCentre;
             float corner = saturate(abs(m.x) / mouthW);
-            float curve = u.smile * (0.45 - corner * corner) * 12 * (1 - saturate(u.jaw * 2.2));
+            // A sneer: one corner hitches higher than the other.
+            float curve = u.smile * (0.45 - corner * corner) * 12 * (1 - saturate(u.jaw * 2.2)) - m.x * 0.05;
             float y = m.y - curve;
-            float mouthD = ellipse(float2(m.x, y), mouthSize);
+            // Lips, not an oval: corners taper to points, the top dips at the centre, the edge is uneven.
+            float bow = y < 0 ? 1 - 0.14 * exp(-m.x * m.x / 90) : 1.0;
+            float shapeX = pow(max(abs(m.x) / mouthW, 0.0001), 1.55);
+            float shapeY = y / (mouthH * bow);
+            float mouthD = (sqrt(shapeX * shapeX * 1 + shapeY * shapeY) - 1) * min(mouthW, mouthH + 8) * 0.7 + (fine - 0.5) * 2.2;
+            // The skin bunches and darkens around it.
+            color *= 1 - 0.5 * exp(-max(mouthD, 0.0) / 6) * visible;
 
-            // Lips: the upper one faces down and stays in shadow, the fuller lower one catches the light.
+            // Thin, cracked lips, pulled back from the teeth.
             float lipSide = smoothstep(-3.0, 3.0, y);
-            float lipWidth = mix(4.2, 7.5, lipSide) * (1 - corner * corner * 0.75);
-            float lip = cover(mouthD - lipWidth, 1.8) * visible;
-            float roll = saturate(1 - abs(mouthD - lipWidth * 0.45) / max(lipWidth * 0.6, 0.1));
-            float3 lipTone = color * mix(0.62, 0.86, lipSide) + float3(0.05, 0.022, 0.026) * mix(0.5, 1.0, lipSide);
-            lipTone += float3(0.05, 0.045, 0.045) * lipSide * roll;
+            float lipWidth = mix(2.8, 5.2, lipSide) * (1 - corner * corner * 0.75);
+            float lip = cover(mouthD - lipWidth, 1.4) * visible;
+            float crack = smoothstep(0.62, 0.8, noise.sample(tile, float2(f.x / 7, f.y / 46)).r);
+            float3 lipTone = color * mix(0.5, 0.85, lipSide) * (1 - crack * 0.15) + float3(0.016, 0.006, 0.008); // the colour of dead skin, not lipstick
             color = mix(color, lipTone, lip);
 
-            float inside = cover(mouthD, 0.8 + min(mouthH * 0.05, 1.2)) * visible;
+            float inside = cover(mouthD, 1.3) * visible;
             if (inside > 0) {
-                float open = saturate(y / max(mouthH, 1.0) * 0.5 + 0.5);
-                float3 cavity = u.sky.rgb * 0.14 + float3(0.022, 0.012, 0.014) * (1 - open);
+                // Wet flesh near the edges, falling away to a black throat.
+                float throat = saturate(-mouthD / max(min(mouthW, mouthH) * 0.62, 1.0));
+                float3 mouth = mix(float3(0.085, 0.03, 0.035), float3(0.006, 0.002, 0.003), smoothstep(0.1, 0.8, throat));
+                mouth *= 0.75 + 0.5 * fine;
 
                 // The tongue, lying low in the dark.
-                float2 tongueAt = float2(m.x, y - mouthH * 0.62);
-                float tongue = cover(ellipse(tongueAt, float2(min(mouthW * 0.62, 25.0), max(mouthH * 0.34, 0.5))), 2.0);
-                float3 flesh = float3(0.2, 0.085, 0.095) * (0.55 + 0.6 * saturate(-tongueAt.y / max(mouthH * 0.34, 1.0)));
-                cavity = mix(cavity, flesh, tongue * smoothstep(0.15, 0.4, u.jaw));
+                float2 tongueAt = float2(m.x, y - mouthH * 0.6);
+                float tongue = cover(ellipse(tongueAt, float2(min(mouthW * 0.58, 26.0), max(mouthH * 0.32, 0.5))), 2.0);
+                float3 tongueTone = float3(0.17, 0.06, 0.075) * (0.5 + 0.6 * saturate(-tongueAt.y / max(mouthH * 0.32, 1.0)));
+                mouth = mix(mouth, tongueTone, tongue * smoothstep(0.2, 0.45, u.jaw));
 
-                // Teeth sit on an arch: narrower towards the corners, falling into shadow there.
-                float dental = saturate(abs(m.x) / 54);
-                float arc = asin(clamp(m.x / 54, -1.0, 1.0));
-                float teethPhase = arc * 5.6;
-                float within = abs(fract(teethPhase) - 0.5) * 2; // 0 mid-tooth, 1 at the gap
-                float gapWidth = (0.3 + aa * 0.6) / 4.8; // half a unit or so, whatever the size on screen
-                float gap = smoothstep(1 - gapWidth - 0.08, 1 - gapWidth + 0.08, within);
-                float falloff = 1 - dental * dental * 0.78;
-                float3 enamel = float3(0.86, 0.83, 0.72) * falloff * mix(0.82, 1.0, u.teeth) * u.cloudLight;
+                // Teeth on an arch: the same size however far it opens, so the lips reveal them.
+                float dental = saturate(abs(m.x) / 56);
+                float arc = asin(clamp(m.x / 56, -1.0, 1.0));
+                float arch = 1 - dental * dental * 0.8;
+                float upperRoot = mouthAt.y - 4 - mouthCentre.y - dental * dental * 7 + sin(arc * 9) * 1.6;
 
-                // Uppers hang from a fixed line on the skull, each tooth's tip slightly rounded.
-                float upperTip = mouthAt.y + 6 - mouthCentre.y - dental * dental * 6 - within * within * 1.6;
-                float upper = (1 - smoothstep(upperTip - 0.7, upperTip + 0.7, m.y)) * (1 - smoothstep(0.9, 1.0, dental));
-                float shade = mix(0.55, 1.0, smoothstep(upperTip - 13, upperTip - 6, m.y)); // the lip's shadow
-                float3 uppers = enamel * shade * (1 - gap * 0.5);
+                // Dark gums, showing above the teeth when the lip pulls back.
+                float gums = 1 - smoothstep(upperRoot + 2, upperRoot + 5, m.y);
+                mouth = mix(mouth, float3(0.2, 0.04, 0.05) * arch * (0.6 + 0.8 * fine), gums);
+                float lowerRoot = mouthH - 4 - dental * dental * 3 + sin(arc * 11 + 2) * 1.3;
+                float lowerGums = smoothstep(lowerRoot - 2, lowerRoot + 1, y);
+                mouth = mix(mouth, float3(0.14, 0.03, 0.035) * arch, lowerGums);
 
-                // Lowers ride on the jaw: smaller, tighter, half hidden by the lip.
-                float lowPhase = arc * 7.0;
-                float lowWithin = abs(fract(lowPhase) - 0.5) * 2;
-                float lowGap = smoothstep(1 - gapWidth - 0.08, 1 - gapWidth + 0.08, lowWithin);
-                float lowerTip = mouthH - 11 - dental * dental * 3 - lowWithin * lowWithin * 1.3;
-                float lower = smoothstep(lowerTip - 0.7, lowerTip + 0.7, y) * (1 - smoothstep(0.72, 0.86, dental));
-                float3 lowers = enamel * 0.8 * (1 - lowGap * 0.5) * mix(1.0, 0.6, saturate((y - lowerTip) / 11));
-
-                float3 mouth = mix(cavity, lowers, lower * smoothstep(0.06, 0.14, u.jaw));
-                mouth = mix(mouth, uppers, upper * smoothstep(0.03, 0.1, u.jaw));
+                // Each tooth its own: long or short, leaning, some rotten, a few gone. They come
+                // to points, with black between them.
+                float warp = arc * 6.6 + sin(arc * 13) * 0.35;
+                for (int row = 0; row < 2; row++) {
+                    if (row == 1 && mouthH < 7) continue; // nothing to see of them yet
+                    float phase = row == 0 ? warp + (m.y - upperRoot) * 0.012 * sin(floor(warp) * 2.7)
+                                           : warp * 1.14 + 0.4 - (lowerRoot - y) * 0.016 * sin(floor(warp * 1.14 + 0.4) * 1.9);
+                    float id = floor(phase) + float(row) * 37;
+                    float luck = hash(id + 3);
+                    float side = (fract(phase) - 0.5) * 2;
+                    float length = (row == 0 ? 19.0 : 12.5) * (0.62 + 0.62 * luck);
+                    if (hash(id + 11) < 0.13) continue; // missing
+                    // How far this column of the tooth reaches from its root, tapering to a point.
+                    float point = mix(1.3, 3.4, hash(id + 41));
+                    float taper = length * (1 - pow(abs(side), point)) * arch;
+                    if (hash(id + 53) > 0.68) taper = min(taper, length * 0.52 + side * 2.5); // snapped off
+                    float from = row == 0 ? m.y - upperRoot : lowerRoot - y;
+                    float tooth = (1 - smoothstep(taper - 0.9, taper + 0.9, from)) * smoothstep(-0.5, 0.5, from);
+                    tooth *= 1 - smoothstep(0.86, 1.0, abs(side));
+                    if (tooth <= 0) continue;
+                    float along = saturate(from / max(length, 1.0));
+                    float rot = hash(id + 23);
+                    float3 enamel = mix(float3(0.74, 0.67, 0.47), float3(0.4, 0.28, 0.13), smoothstep(0.35, 0.95, rot));
+                    enamel = mix(float3(0.13, 0.08, 0.04), enamel, smoothstep(0.02, 0.4, along)); // stained at the gum
+                    float grime = noise.sample(tile, float2(f.x / 48, f.y / 70)).r;
+                    enamel *= 0.72 + 0.5 * grime;
+                    enamel = mix(enamel, float3(0.05, 0.03, 0.02), smoothstep(0.62, 0.72, grime) * smoothstep(0.45, 0.8, rot)); // decay
+                    enamel *= 1 - abs(side) * abs(side) * 0.6; // round across its face
+                    enamel += float3(0.3) * pow(saturate(1 - abs(side + 0.3) * 3), 3.0) * (1 - along) * (row == 0 ? 1.0 : 0.5); // wet
+                    float rowLight = row == 0 ? mix(0.5, 1.0, smoothstep(0.0, 0.5, along)) : 0.72;
+                    mouth = mix(mouth, enamel * arch * rowLight * u.cloudLight, tooth);
+                }
+                mouth *= smoothstep(0.0, 0.05, u.jaw) * 0.85 + 0.15;
+                // The far side of the mouth falls into the same shadow as the far side of the face.
+                mouth *= mix(0.32, 1.0, 1 - smoothstep(-34.0, 30.0, w.x));
                 color = mix(color, mouth, inside);
             }
 
             // Fog drifting across the face, in front of it.
             float veil = noise.sample(tile, f / 340 + float2(-u.time * 0.012, u.time * 0.005)).r;
-            color = mix(color, mist * 0.42, smoothstep(0.5, 0.86, veil) * 0.42 * saturate(visible * 1.5));
+            color = mix(color, mist * 0.42, smoothstep(0.52, 0.88, veil) * 0.26 * saturate(visible * 1.5));
         }
 
         // Voices disturb the fog: the reply's ripples leave the mouth, yours close in on it.
-        float clear = 1 - saturate(visible * 2.2); // never across the face
+        float clear = 1 - smoothstep(0.0, 0.8, visible); // thinning out as they reach the face
         float along = saturate(reach / 720);
         float said = rings.sample(edge, float2(along, 0.5)).g;
         float heard = rings.sample(edge, float2(1 - along, 0.5)).r;
         if (u.puck < 0.5 && u.ringStrength > 0.01) {
-            if (said > 0.02) color = mix(color, u.reply.rgb, ring(reach, theta, said, u.time * 3.8, u.time, aa) * hush * u.ringStrength * 0.34 * (1 - along * 0.5) * clear);
-            if (heard > 0.02) color = mix(color, u.you.rgb, ring(reach, theta, heard, -u.time * 3.8, u.time, aa) * hush * u.ringStrength * 0.34 * clear);
+            if (said > 0.02) color = mix(color, u.reply.rgb, ring(reach, theta, said, u.time * 3.8, u.time, aa) * hush * u.ringStrength * 0.3 * (1 - along * 0.85) * clear);
+            if (heard > 0.02) color = mix(color, u.you.rgb, ring(reach, theta, heard, -u.time * 3.8, u.time, aa) * hush * u.ringStrength * 0.22 * (1 - along * 0.5) * clear);
         }
 
-        // Two points of light, deep in the sockets, that look through the fog at you.
+        // The eyes, deep in the sockets: wet, bloodshot, with a milky iris and a pinprick pupil.
+        // They're drawn in front of the fog, so they look through it.
         float side = f.x < 0 ? -1 : 1;
-        float2 eyeAt = float2(abs(f.x) - 58, f.y + 49) - float2(u.gaze.x * side * 9, u.gaze.y * 7);
-        float eyeDist = length(eyeAt);
-        float eyeR = 2.4 + saturate(u.eye - 1) * 5;
-        float light = (cover(eyeDist - eyeR, 0.9) + exp(-eyeDist / 8) * 0.3) * saturate(u.eye);
-        color += float3(0.88, 0.93, 1.0) * light * (1 - u.thought * 0.45) * u.cloudLight;
+        float2 e = float2(abs(w.x) - 58, w.y + 46);
+        float across = saturate(abs(e.x) / 21);
+        float lidUp = (7.6 * u.eye + 0.2) * (1 - across * across); // heavy lids, cutting off the top of the iris
+        float lidDown = (6.5 * u.eye + 0.2) * (1 - across * across);
+        float eyeOpen = cover(abs(e.y) - (e.y < 0 ? lidUp : lidDown), 1.2) * (1 - step(1.0, across)) * smoothstep(0.03, 0.14, u.eye);
+        // The lid's thickness: a dark line above, a raw wet rim below.
+        float lidEdge = abs(e.y) - (e.y < 0 ? lidUp : lidDown);
+        if (across < 1) {
+            float near = exp(-max(lidEdge, 0.0) / 2.2) * saturate(visible * 1.8);
+            color = e.y < 0 ? color * (1 - near * 0.8) : mix(color, float3(0.2, 0.12, 0.11) * u.cloudLight, near * 0.4);
+        }
+        if (eyeOpen > 0) {
+            float3 white = float3(0.56, 0.52, 0.43) * (1 - across * across * 0.6);
+            float vein = smoothstep(0.5, 0.68, noise.sample(tile, float2(e.y / 22 + side, e.x / 110)).r);
+            white = mix(white, float3(0.33, 0.13, 0.11), saturate(across * across * 0.7 + vein * (0.25 + across * 0.75)));
+            float2 irisAt = float2(e.x * side, e.y) - float2(u.gaze.x * 9, u.gaze.y * 7);
+            float irisD = length(irisAt);
+            float cloudy = noise.sample(tile, irisAt / 42 + side).r;
+            float3 eyeball = mix(white, float3(0.17, 0.17, 0.16), cover(irisD - 7.2, 2.0) * 0.8); // a blurred ring, not a line
+            eyeball = mix(eyeball, mix(float3(0.72, 0.71, 0.66), float3(0.43, 0.43, 0.41), saturate(irisD / 6.5 + (cloudy - 0.5))), cover(irisD - 6.1, 1.6));
+            eyeball = mix(eyeball, float3(0.02), cover(irisD - 1.5 - saturate(u.eye - 1) * 0.4, 0.9) * mix(0.55, 1.0, cloudy)); // milk across the pupil
+            eyeball *= mix(0.2, 1.0, smoothstep(-lidUp, -lidUp + 8, e.y)); // the lid's shadow
+            float2 glint = (irisAt - float2(-3.2, -1.2)) * float2(0.7, 1.5);
+            eyeball += float3(0.55) * cover(length(glint) - 1.1 - (fine - 0.5) * 1.2, 0.8); // wet, and not quite round
+            color = mix(color, eyeball * (1 - u.thought * 0.3) * u.cloudLight, eyeOpen * saturate(visible * 1.8));
+        }
 
         // Breath: cold mist falling from the mouth, only as strong as the voice.
         if (u.breath > 0.02 && u.puck < 0.5) {
@@ -538,10 +622,10 @@ final class FaceRenderer {
             float plume = 1 - smoothstep(spread * 0.15, spread, abs(b.x + sin(b.y * 0.018 + u.time) * 12));
             float falling = noise.sample(tile, float2(f.x / 190, f.y / 240 - u.time * 0.24)).r;
             float cloud = plume * smoothstep(0.36, 0.76, falling) * exp(-max(b.y, 0.0) / 120) * smoothstep(-6, 12, b.y);
-            color = mix(color, mist, saturate(cloud * u.breath) * 0.55 * hush);
+            color = mix(color, mist * 1.15, saturate(cloud * u.breath * 1.5) * 0.85 * hush);
         }
 
-        float alpha = u.puck > 0.5 ? saturate(visible * 1.8 + exp(-max(length(f / float2(170, 225)) - 1, 0.0) * 5) * 0.55) : 1;
+        float alpha = u.puck > 0.5 ? smoothstep(0.0, 0.55, visible) : 1;
         return float4(color * alpha, alpha);
     }
     """

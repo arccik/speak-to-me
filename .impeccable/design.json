@@ -1,132 +1,292 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-01T09:35:51Z",
+  "generatedAt": "2026-11-02T12:12:22Z",
   "title": "Design System: Speak to Me",
   "extensions": {
     "colorMeta": {
-      "cherry-vinyl": {
+      "void": {
         "role": "primary",
-        "displayName": "Cherry Vinyl",
-        "canonical": "#E5102B",
+        "displayName": "Void",
+        "canonical": "#07080C",
         "tonalRamp": [
-          "#200001",
-          "#4D0006",
-          "#800312",
-          "#B8021E",
-          "#ED2132",
-          "#FD746E",
-          "#FEB3AD",
-          "#FFE9E6"
-        ]
-      },
-      "cobalt-label": {
-        "role": "secondary",
-        "displayName": "Cobalt Label",
-        "canonical": "#1420FF",
-        "tonalRamp": [
-          "#010037",
-          "#040279",
-          "#0D00C8",
-          "#1738FE",
-          "#4576FD",
-          "#7AA1FE",
-          "#B1C9FE",
-          "#E7EFFF"
-        ]
-      },
-      "acid-reply": {
-        "role": "tertiary",
-        "displayName": "Acid Reply",
-        "canonical": "#F4FF3A",
-        "tonalRamp": [
-          "#0B0D00",
-          "#262800",
-          "#434600",
-          "#626702",
-          "#848A02",
-          "#A7AE06",
-          "#C9D17B",
-          "#EEF1D8"
-        ]
-      },
-      "white-you": {
-        "role": "neutral",
-        "displayName": "White You",
-        "canonical": "#FFFFFF",
-        "tonalRamp": [
-          "#0B0B0B",
-          "#252525",
-          "#424242",
-          "#616161",
-          "#828282",
-          "#A5A5A5",
-          "#C9C9C9",
-          "#EEEEEE"
-        ]
-      },
-      "pale-reply": {
-        "role": "neutral",
-        "displayName": "Pale Reply",
-        "canonical": "#FBFFC2",
-        "tonalRamp": [
-          "#0C0C00",
-          "#272700",
-          "#444508",
-          "#63652D",
-          "#84874E",
-          "#A7AA74",
-          "#CACCAD",
-          "#EFEFE6"
-        ]
-      },
-      "muted-vinyl": {
-        "role": "neutral",
-        "displayName": "Muted Vinyl",
-        "canonical": "#7A0A1C",
-        "tonalRamp": [
-          "#200001",
-          "#4D000B",
-          "#7C0E1E",
-          "#A2373C",
-          "#C95A5C",
-          "#EC8181",
-          "#F8B6B3",
-          "#FEE9E8"
-        ]
-      },
-      "stuck-vinyl": {
-        "role": "neutral",
-        "displayName": "Stuck Vinyl",
-        "canonical": "#15131A",
-        "tonalRamp": [
-          "#0B0B0E",
-          "#26242A",
-          "#434049",
-          "#626068",
-          "#83818A",
-          "#A6A3AC",
-          "#C9C8CE",
+          "#0A0B0E",
+          "#23252A",
+          "#404247",
+          "#5F6167",
+          "#808288",
+          "#A3A5AB",
+          "#C8C9CD",
           "#EEEEF0"
         ]
       },
-      "hover-wash": {
+      "oxblood": {
+        "role": "primary",
+        "displayName": "Oxblood",
+        "canonical": "#2C060C",
+        "tonalRamp": [
+          "#180506",
+          "#3E161B",
+          "#5F3337",
+          "#815255",
+          "#A57376",
+          "#C99598",
+          "#E3BFC0",
+          "#F7EBEC"
+        ]
+      },
+      "reply-ink": {
+        "role": "secondary",
+        "displayName": "Reply Bone",
+        "canonical": "#D8CFA8",
+        "tonalRamp": [
+          "#0F0B00",
+          "#2D2501",
+          "#4A421F",
+          "#6A613E",
+          "#8B835E",
+          "#AEA680",
+          "#CFCAB0",
+          "#F0EFE7"
+        ]
+      },
+      "reply-long": {
+        "role": "secondary",
+        "displayName": "Long Reply Bone",
+        "canonical": "#D8D2BC",
+        "tonalRamp": [
+          "#0E0B04",
+          "#2A2513",
+          "#474230",
+          "#67614E",
+          "#88826E",
+          "#ABA590",
+          "#CDC9BB",
+          "#F0EEEA"
+        ]
+      },
+      "flesh-lit": {
+        "role": "tertiary",
+        "displayName": "Flesh Lit",
+        "canonical": "#A89E8C",
+        "tonalRamp": [
+          "#0F0A04",
+          "#2C2415",
+          "#494131",
+          "#69604F",
+          "#8B8170",
+          "#AEA492",
+          "#CFC8BC",
+          "#F0EEEA"
+        ]
+      },
+      "flesh-bruised": {
+        "role": "tertiary",
+        "displayName": "Flesh Bruised",
+        "canonical": "#78696B",
+        "tonalRamp": [
+          "#10090A",
+          "#2E2123",
+          "#4C3E40",
+          "#6C5D5F",
+          "#8D7E80",
+          "#B1A0A2",
+          "#D1C6C7",
+          "#F1EDEE"
+        ]
+      },
+      "enamel": {
+        "role": "tertiary",
+        "displayName": "Enamel",
+        "canonical": "#BDAB78",
+        "tonalRamp": [
+          "#110A00",
+          "#2F2400",
+          "#50400A",
+          "#70602E",
+          "#92814F",
+          "#B6A471",
+          "#D4C9A7",
+          "#F2EEE4"
+        ]
+      },
+      "rot": {
+        "role": "tertiary",
+        "displayName": "Rot",
+        "canonical": "#664721",
+        "tonalRamp": [
+          "#150800",
+          "#371F00",
+          "#593B14",
+          "#7A5A34",
+          "#9D7B55",
+          "#C19E76",
+          "#DDC5AA",
+          "#F5EDE5"
+        ]
+      },
+      "gum": {
+        "role": "tertiary",
+        "displayName": "Gum",
+        "canonical": "#330A0D",
+        "tonalRamp": [
+          "#190405",
+          "#3F1517",
+          "#603333",
+          "#835251",
+          "#A67372",
+          "#CB9594",
+          "#E4BFBD",
+          "#F7EBEB"
+        ]
+      },
+      "vein": {
+        "role": "tertiary",
+        "displayName": "Vein",
+        "canonical": "#751412",
+        "tonalRamp": [
+          "#210000",
+          "#4D0003",
+          "#791815",
+          "#9E3D35",
+          "#C55F55",
+          "#EC8377",
+          "#FDB4AA",
+          "#FFE9E5"
+        ]
+      },
+      "milk-iris": {
+        "role": "tertiary",
+        "displayName": "Milk Iris",
+        "canonical": "#B3BDB8",
+        "tonalRamp": [
+          "#080C0A",
+          "#1F2723",
+          "#3C4440",
+          "#5B645F",
+          "#7C8580",
+          "#9EA8A3",
+          "#C4CBC8",
+          "#EDEFEE"
+        ]
+      },
+      "you-ink": {
         "role": "neutral",
-        "displayName": "Hover Wash",
-        "canonical": "rgba(255, 255, 255, 0.18)"
+        "displayName": "Cold White",
+        "canonical": "#E9ECF1",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232529",
+          "#404246",
+          "#5F6166",
+          "#808287",
+          "#A2A5AA",
+          "#C7C9CC",
+          "#EEEEEF"
+        ]
+      },
+      "hollow": {
+        "role": "neutral",
+        "displayName": "Hollow",
+        "canonical": "#040406",
+        "tonalRamp": [
+          "#0B0B0D",
+          "#252528",
+          "#414146",
+          "#616165",
+          "#828286",
+          "#A4A4A9",
+          "#C9C9CC",
+          "#EEEEEF"
+        ]
+      },
+      "fog": {
+        "role": "neutral",
+        "displayName": "Fog",
+        "canonical": "#8C96A8",
+        "tonalRamp": [
+          "#070B13",
+          "#1D2533",
+          "#3A4252",
+          "#586272",
+          "#798394",
+          "#9BA6B8",
+          "#C2C9D6",
+          "#ECEEF2"
+        ]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#A9B2C2",
+        "tonalRamp": [
+          "#080B12",
+          "#1E2531",
+          "#3B4250",
+          "#5A6270",
+          "#7A8392",
+          "#9DA5B5",
+          "#C3C9D4",
+          "#EDEEF2"
+        ]
+      },
+      "cherry": {
+        "role": "neutral",
+        "displayName": "Cherry",
+        "canonical": "#B5122A",
+        "tonalRamp": [
+          "#200001",
+          "#4D0009",
+          "#7E071A",
+          "#B4112A",
+          "#DD434A",
+          "#FE7272",
+          "#FDB3AF",
+          "#FEE9E7"
+        ]
+      },
+      "wisp-rest": {
+        "role": "neutral",
+        "displayName": "Wisp Rest",
+        "canonical": "rgba(169, 178, 194, 0.17)",
+        "tonalRamp": [
+          "#080B12",
+          "#1E2531",
+          "#3B4250",
+          "#5A6270",
+          "#7A8392",
+          "#9DA5B5",
+          "#C3C9D4",
+          "#EDEEF2"
+        ]
+      },
+      "wisp-firm": {
+        "role": "neutral",
+        "displayName": "Wisp Firm",
+        "canonical": "rgba(169, 178, 194, 0.3)",
+        "tonalRamp": [
+          "#080B12",
+          "#1E2531",
+          "#3B4250",
+          "#5A6270",
+          "#7A8392",
+          "#9DA5B5",
+          "#C3C9D4",
+          "#EDEEF2"
+        ]
       }
     },
     "typographyMeta": {
       "words-large": {
         "displayName": "Words, large",
-        "purpose": "What is being said now, under 70 characters."
+        "purpose": "What is being said now, under 70 characters, and the empty-state invitation."
       },
       "words-medium": {
         "displayName": "Words, medium",
-        "purpose": "Lines of 70 to 149 characters, and system messages."
+        "purpose": "Lines of 70 to 149 characters, and every system or error message."
       },
       "words-small": {
         "displayName": "Words, small",
-        "purpose": "Lines of 150 characters or more."
+        "purpose": "Lines of 150 characters or more, capped at 190pt tall."
       },
       "status-stamp": {
         "displayName": "Status stamp",
@@ -140,89 +300,112 @@
         "displayName": "Pane title",
         "purpose": "Each Settings pane's name."
       },
-      "transcript-you": {
-        "displayName": "Transcript, you",
-        "purpose": "Your lines on the sleeve."
+      "transcript": {
+        "displayName": "Transcript",
+        "purpose": "Lines in the conversation, 2pt extra leading for yours and 4pt for replies."
       },
-      "transcript-reply": {
-        "displayName": "Transcript, reply",
-        "purpose": "Reply lines on the sleeve."
+      "error-line": {
+        "displayName": "Error line",
+        "purpose": "Transcript errors, with a warning symbol."
       },
       "action": {
         "displayName": "Action",
-        "purpose": "Underlined word controls and mic notices."
+        "purpose": "Words in wisps, and mic notices."
       },
       "small-print": {
         "displayName": "Small print",
-        "purpose": "The hint line and tool notes."
+        "purpose": "The hint line, tool notes, the cut-in note and the model menu."
       },
       "puck-caption": {
         "displayName": "Puck caption",
-        "purpose": "The floating record's status word."
+        "purpose": "The floating face's status."
+      },
+      "puck-snippet": {
+        "displayName": "Puck snippet",
+        "purpose": "The words in flight under the floating face."
       }
     },
-    "shadows": [
-      {
-        "name": "tonearm",
-        "value": "black at up to 34%, offset 3 by 5pt, soft over 9pt, growing with lift (shader-drawn)",
-        "purpose": "The stage's only shadow; it makes a lifted arm read as lifted."
-      },
-      {
-        "name": "icon-tile",
-        "value": "0 14px 28px rgba(0,0,0,0.35)",
-        "purpose": "The app icon's macOS tile only."
-      }
-    ],
+    "shadows": [],
     "motion": [
       {
-        "name": "wavefront",
-        "value": "1400pt/s from the centre, 52pt colour edge",
-        "purpose": "One change crossing the whole disc. Strength 1 for a colour change, 0.6 entering hearing or speaking, 2.4 for cutting in."
+        "name": "phase-wave",
+        "value": "1400pt/s, 52pt soft edge",
+        "purpose": "The dark wave a phase change sends from the mouth. Strength 1 for a new ground, 0.6 entering hearing or speaking, 2.4 on cut-in."
       },
       {
-        "name": "groove-heat",
-        "value": "exp(-age / 9 turns)",
-        "purpose": "Sets a groove's swing and width as it moves outward."
+        "name": "lurch",
+        "value": "exp decay 3.2/s, 10% scale",
+        "purpose": "The head throwing itself forward when you cut in."
       },
       {
-        "name": "spin-ease",
-        "value": "exponential, rate 2.2/s",
-        "purpose": "The disc's speed easing toward each phase's target, including its coast to a stop."
+        "name": "jaw",
+        "value": "exp 34/s opening, 20/s closing",
+        "purpose": "Lips following the voice."
       },
       {
-        "name": "arm-ease",
-        "value": "exponential, rate 6/s",
-        "purpose": "The tonearm's swing and lift."
+        "name": "gaze",
+        "value": "exp 3.5/s",
+        "purpose": "Slow eyes following the pointer."
       },
       {
-        "name": "voice-meter",
-        "value": "exponential, attack 18/s, release 5/s",
-        "purpose": "Voice level, like a VU meter."
+        "name": "blink",
+        "value": "0.16s, every 4-11s",
+        "purpose": "Blinks, and a blink on a change of phase."
       },
       {
-        "name": "scratch-return",
-        "value": "exponential, rate 5/s",
-        "purpose": "The disc springing back after a scratch."
+        "name": "fog-drift",
+        "value": "0.004-0.014 noise tiles/s",
+        "purpose": "The planes of fog, each at its own speed."
       },
       {
-        "name": "sleeve-spring",
-        "value": "spring(duration: 0.55, bounce: 0.1)",
-        "purpose": "The sleeve sliding up over the record."
+        "name": "ripple-travel",
+        "value": "3.8 spacings/s at 42 units",
+        "purpose": "Voice ripples through the fog."
+      },
+      {
+        "name": "breath",
+        "value": "exp 10/s rising, 2.5/s falling",
+        "purpose": "Cold mist from the mouth."
+      },
+      {
+        "name": "wisp-firm",
+        "value": "0.22s ease-out, scale 1.04",
+        "purpose": "A wisp condensing under the pointer."
+      },
+      {
+        "name": "wisp-drift",
+        "value": "10fps; 2.4pt by 1.6pt, scale 1.8%",
+        "purpose": "A wisp drifting at rest."
+      },
+      {
+        "name": "wisp-burst",
+        "value": "0.55s ease-out, 3 wisps at 40%",
+        "purpose": "A clicked wisp scattering."
+      },
+      {
+        "name": "bank-open",
+        "value": "spring 0.55s, bounce 0.1",
+        "purpose": "The conversation rolling up."
       },
       {
         "name": "words-change",
-        "value": "ease-out 0.25s, fade with a 12pt rise",
-        "purpose": "Words and transcript rows arriving."
+        "value": "0.25s ease-out, 12pt rise",
+        "purpose": "New words and transcript rows."
       },
       {
         "name": "status-change",
-        "value": "ease-out 0.2s crossfade",
-        "purpose": "Status word and hint line."
+        "value": "0.2s ease-out crossfade",
+        "purpose": "Status word and hint."
       },
       {
         "name": "dock-change",
-        "value": "ease-out 0.18s",
-        "purpose": "Switching between the control row and the type field."
+        "value": "0.18s ease-out",
+        "purpose": "Action row to type field."
+      },
+      {
+        "name": "doze",
+        "value": "starts 40s, stops drawing 45s",
+        "purpose": "Left alone, it dozes off and drawing stops."
       }
     ],
     "breakpoints": [
@@ -235,166 +418,183 @@
         "value": "520x800pt"
       },
       {
-        "name": "settings-fixed",
+        "name": "settings",
         "value": "720x560pt"
       },
       {
-        "name": "floating-panel",
+        "name": "floating-face",
         "value": "200x230pt"
       }
     ]
   },
   "components": [
     {
-      "name": "Text Action",
+      "name": "Wisp Action",
       "kind": "button",
-      "refersTo": "text-action",
-      "description": "The standard stage control: an underlined word that inverts to a white block on hover. The focus ring approximates the system's.",
-      "html": "<div class=\"ds-ta-ground\"><button class=\"ds-ta\"><svg width=\"14\" height=\"11\" viewBox=\"0 0 14 11\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" aria-hidden=\"true\"><rect x=\".7\" y=\".7\" width=\"12.6\" height=\"9.6\" rx=\"1.5\"/><path d=\"M3 3.5h1M6 3.5h1M9 3.5h2M3 6h1M6 6h1M9 6h2M4 8h6\"/></svg><span>Type</span></button><button class=\"ds-ta\"><span>Conversation · 6</span></button></div>",
-      "css": ".ds-ta-ground{background:#E5102B;padding:16px 22px;display:flex;gap:18px;} .ds-ta{font-family:'Avenir Next',-apple-system,sans-serif;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 6px;margin:0 -6px;background:transparent;border:0;border-radius:0;color:#fff;font-size:13px;font-weight:700;cursor:pointer;} .ds-ta span{text-decoration:underline;} .ds-ta:hover{background:#fff;color:#E5102B;} .ds-ta:hover span{text-decoration:none;} .ds-ta:focus-visible{outline:2px solid currentColor;outline-offset:2px;} .ds-ta:disabled{opacity:.55;}"
+      "refersTo": "wisp-action",
+      "description": "The standard stage control: a word in a thin wisp of mist that thickens under the pointer.",
+      "html": "<button class=\"ds-wisp\">Stop reply</button>",
+      "css": ".ds-wisp { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 6px; background: none; border: 0; color: #E9ECF1; font: 500 13px 'Avenir Next', -apple-system, sans-serif; cursor: pointer; isolation: isolate; } .ds-wisp::before { content: ''; position: absolute; inset: -6px -14px; z-index: -1; background: radial-gradient(ellipse closest-side, #A9B2C2 35%, transparent); filter: blur(5px); opacity: 0.17; transition: opacity 0.22s ease-out, transform 0.22s ease-out; } .ds-wisp:hover::before, .ds-wisp:focus-visible::before { opacity: 0.3; transform: scale(1.04); } .ds-wisp:focus-visible { outline: none; } .ds-wisp:disabled { opacity: 0.55; }"
     },
     {
       "name": "Top Bar Icon",
       "kind": "button",
       "refersTo": "top-icon",
-      "description": "Bold white symbol in the top bar, with the white wash on hover and 50% when disabled.",
-      "html": "<div class=\"ds-top-ground\"><button class=\"ds-top\" aria-label=\"New conversation\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M13 8.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h4.5M6.5 9.5 14 2\"/></svg></button></div>",
-      "css": ".ds-top-ground{background:#E5102B;padding:12px;} .ds-top{display:grid;place-items:center;width:28px;height:24px;padding:0;background:transparent;border:0;border-radius:6px;color:#fff;cursor:pointer;} .ds-top:hover{background:rgba(255,255,255,.18);} .ds-top:focus-visible{outline:2px solid currentColor;outline-offset:2px;} .ds-top:disabled{opacity:.5;}"
-    },
-    {
-      "name": "Composer Toggle",
-      "kind": "button",
-      "refersTo": "composer-toggle-on",
-      "description": "Square icon toggle in the type row: a solid white block with a cherry icon while on.",
-      "html": "<div class=\"ds-ct-ground\"><button class=\"ds-ct\" aria-pressed=\"false\" aria-label=\"Share your screen\"><svg width=\"16\" height=\"12\" viewBox=\"0 0 16 12\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M1 6s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5Z\"/><circle cx=\"8\" cy=\"6\" r=\"2\"/></svg></button><button class=\"ds-ct ds-ct-on\" aria-pressed=\"true\" aria-label=\"Share your screen\"><svg width=\"16\" height=\"12\" viewBox=\"0 0 16 12\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M1 6s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5Z\"/><circle cx=\"8\" cy=\"6\" r=\"2\"/></svg></button></div>",
-      "css": ".ds-ct-ground{background:#E5102B;padding:12px;display:flex;gap:6px;} .ds-ct{display:grid;place-items:center;width:28px;height:28px;padding:0;background:transparent;border:0;border-radius:0;color:#fff;cursor:pointer;} .ds-ct:hover{background:rgba(255,255,255,.18);} .ds-ct-on,.ds-ct-on:hover{background:#fff;color:#E5102B;} .ds-ct:focus-visible{outline:2px solid currentColor;outline-offset:2px;}"
+      "description": "A bare symbol in the top bar that gains a firm puff of mist on hover.",
+      "html": "<button class=\"ds-top-icon\" aria-label=\"New conversation\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 20h4L19 9l-4-4L4 16z\"/></svg></button>",
+      "css": ".ds-top-icon { position: relative; width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: #E9ECF1; cursor: pointer; isolation: isolate; } .ds-top-icon::before { content: ''; position: absolute; inset: -4px -3px; z-index: -1; background: radial-gradient(ellipse closest-side, #A9B2C2 40%, transparent); filter: blur(3px); opacity: 0; transition: opacity 0.18s ease-out; } .ds-top-icon:hover::before, .ds-top-icon:focus-visible::before { opacity: 0.3; } .ds-top-icon:focus-visible { outline: none; } .ds-top-icon:disabled { opacity: 0.5; }"
     },
     {
       "name": "Type Field",
       "kind": "input",
       "refersTo": "type-field",
-      "description": "Heavy 22pt typing directly on the vinyl, sitting on a 2pt solid white rule, with no box.",
-      "html": "<div class=\"ds-tf-ground\"><input class=\"ds-tf\" placeholder=\"Type something\" aria-label=\"Message\"></div>",
-      "css": ".ds-tf-ground{background:#E5102B;padding:16px 22px;} .ds-tf{font-family:'Avenir Next',-apple-system,sans-serif;width:100%;background:transparent;border:0;border-bottom:2px solid #fff;border-radius:0;padding:0 0 6px;color:#fff;font-size:22px;font-weight:800;outline:0;} .ds-tf::placeholder{color:rgba(255,255,255,.8);} .ds-tf:focus-visible{border-bottom-width:3px;}"
+      "description": "The typed draft in Didot on a firm puff of mist, replacing the action row.",
+      "html": "<div class=\"ds-type\"><input class=\"ds-type-input\" placeholder=\"Type something\" aria-label=\"Message\"></div>",
+      "css": ".ds-type { position: relative; padding: 8px 10px; width: 320px; isolation: isolate; } .ds-type::before { content: ''; position: absolute; inset: -6px; z-index: -1; background: radial-gradient(ellipse closest-side, #A9B2C2 60%, transparent); filter: blur(5px); opacity: 0.3; } .ds-type-input { width: 100%; background: none; border: 0; outline: none; color: #E9ECF1; font: 400 22px Didot, ui-serif, serif; } .ds-type-input::placeholder { color: rgba(233, 236, 241, 0.7); } .ds-type-input:focus-visible { caret-color: #E9ECF1; }"
     },
     {
-      "name": "Words on the Vinyl",
+      "name": "Status Stamp",
+      "kind": "custom",
+      "refersTo": "status-stamp",
+      "description": "The one word naming the phase, in Didot italic in the free dark at top left.",
+      "html": "<div class=\"ds-stamp\">Speaking</div>",
+      "css": ".ds-stamp { color: #E9ECF1; font: italic 400 24px Didot, ui-serif, serif; }"
+    },
+    {
+      "name": "Words in the Dark",
       "kind": "custom",
       "refersTo": "words-large",
-      "description": "Your words in white and the reply in yellow, printed directly on the vinyl at full opacity.",
-      "html": "<div class=\"ds-wo\"><p class=\"ds-wo-s\">Ready</p><p class=\"ds-wo-w\">Click anywhere and start talking.</p><p class=\"ds-wo-w ds-wo-r\">Mount Elbrus, in the Caucasus.</p></div>",
-      "css": ".ds-wo{background:#E5102B;padding:22px;} .ds-wo p{margin:0;} .ds-wo-s{font-family:'Avenir Next Condensed','Avenir Next',sans-serif;font-weight:800;color:#fff;font-size:24px;margin-bottom:24px;} .ds-wo-w{font-family:'Avenir Next',-apple-system,sans-serif;color:#fff;font-size:34px;font-weight:800;letter-spacing:-.5px;} .ds-wo-r{color:#F4FF3A;margin-top:12px;}"
+      "description": "What is being said now, set straight on the dark in the speaker's ink.",
+      "html": "<p class=\"ds-words\">It's about minus eight at the summit, with strong winds and clear skies.</p>",
+      "css": ".ds-words { max-width: 460px; margin: 0; padding: 18px 22px; background: #07080C; color: #D8CFA8; font: 400 34px/1.18 Didot, ui-serif, serif; }"
     },
     {
-      "name": "The Sleeve",
+      "name": "Fog Bank Transcript",
       "kind": "card",
-      "refersTo": "sleeve",
-      "description": "The conversation as a flat cobalt field: heavy white on the right, medium pale yellow on the left, no bubbles.",
-      "html": "<div class=\"ds-sl\"><p class=\"ds-sl-s\">Speaking</p><p class=\"ds-sl-y\">What's the tallest mountain in Europe?</p><p class=\"ds-sl-r\">That's Mount Elbrus in the Caucasus, at about 5,642 metres.</p></div>",
-      "css": ".ds-sl{background:#1420FF;padding:14px 22px 16px;display:flex;flex-direction:column;gap:18px;} .ds-sl p{margin:0;} .ds-sl-s{font-family:'Avenir Next Condensed','Avenir Next',sans-serif;font-weight:800;color:#fff;font-size:24px;} .ds-sl-y{font-family:'Avenir Next',-apple-system,sans-serif;color:#fff;font-size:16px;font-weight:800;text-align:right;max-width:400px;align-self:flex-end;} .ds-sl-r{font-family:'Avenir Next',-apple-system,sans-serif;color:#FBFFC2;font-size:16px;font-weight:500;line-height:1.5;max-width:480px;}"
+      "refersTo": "fog-bank",
+      "description": "The conversation with no bubbles: yours right in cold white, replies left in long bone.",
+      "html": "<div class=\"ds-bank\"><p class=\"ds-you\">Have people skied down it?</p><p class=\"ds-reply\">Yes, plenty. There's a ski resort on its southern slopes.</p></div>",
+      "css": ".ds-bank { display: flex; flex-direction: column; gap: 18px; width: 460px; padding: 14px 22px 16px; background: linear-gradient(transparent, #07080C 3%); font: 500 16px 'Avenir Next', -apple-system, sans-serif; } .ds-bank p { margin: 0; } .ds-you { align-self: flex-end; max-width: 400px; text-align: right; color: #E9ECF1; } .ds-reply { max-width: 480px; color: #D8D2BC; line-height: 1.5; }"
     },
     {
-      "name": "The Record",
-      "kind": "custom",
-      "refersTo": "cherry-vinyl",
-      "description": "A static impression of the signature disc: cherry vinyl, one hot white and one hot yellow groove, cobalt label, yellow spindle. The real one is a Metal shader.",
-      "html": "<svg class=\"ds-rec\" viewBox=\"0 0 200 200\" role=\"img\" aria-label=\"Record\"><circle cx=\"100\" cy=\"100\" r=\"98\" fill=\"#E5102B\"/><g fill=\"none\" stroke=\"#85091A\" stroke-width=\".6\"><circle cx=\"100\" cy=\"100\" r=\"92\"/><circle cx=\"100\" cy=\"100\" r=\"86\"/><circle cx=\"100\" cy=\"100\" r=\"80\"/><circle cx=\"100\" cy=\"100\" r=\"74\"/><circle cx=\"100\" cy=\"100\" r=\"68\"/></g><path d=\"M100 41c9 0 12 6 21 7s14 9 19 15 5 13 11 21-1 15-3 23-10 12-14 19-14 7-22 13-15 0-23 0-14-7-22-13-11-12-14-19-5-15-3-23 6-14 11-21 13-9 19-15 12-6 20-7Z\" fill=\"none\" stroke=\"#F4FF3A\" stroke-width=\"2\"/><path d=\"M100 50c8 0 11 5 18 6s13 8 17 13 4 11 9 18-1 13-2 20-9 10-12 16-12 6-19 11-13 0-20 0-12-6-19-11-9-10-12-16-3-13-2-20 5-12 9-18 11-8 17-13 11-6 16-6Z\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2\"/><circle cx=\"100\" cy=\"100\" r=\"26\" fill=\"#1420FF\"/><circle cx=\"100\" cy=\"100\" r=\"2.4\" fill=\"#F4FF3A\"/></svg>",
-      "css": ".ds-rec{display:block;width:200px;height:200px;}"
+      "name": "Floating Face Caption",
+      "kind": "chip",
+      "refersTo": "puck-caption",
+      "description": "The floating face's status on firm mist backed by a darkened layer, readable over any desktop.",
+      "html": "<div class=\"ds-puck\">Listening</div>",
+      "css": ".ds-puck { position: relative; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; color: #E9ECF1; font: italic 400 13px Didot, ui-serif, serif; isolation: isolate; } .ds-puck::before { content: ''; position: absolute; inset: -8px -14px; z-index: -1; background: radial-gradient(ellipse closest-side, rgba(7, 8, 12, 0.9) 55%, transparent), radial-gradient(ellipse closest-side, rgba(169, 178, 194, 0.3) 55%, transparent); filter: blur(3px); }"
     },
     {
       "name": "Personality Chip",
       "kind": "chip",
-      "refersTo": "preset-chip-selected",
-      "description": "Settings only: a native-feeling chip, filled cherry when selected. Its pill shape does not apply to the stage.",
-      "html": "<div class=\"ds-ch-ground\"><button class=\"ds-ch ds-ch-on\">Friendly</button><button class=\"ds-ch\">Concise</button></div>",
-      "css": ".ds-ch-ground{background:#323232;padding:12px;display:flex;gap:8px;} .ds-ch{font:500 12px -apple-system,sans-serif;height:26px;padding:0 10px;border:0;border-radius:9999px;background:rgba(255,255,255,.07);color:#fff;cursor:pointer;} .ds-ch:hover{background:rgba(255,255,255,.14);} .ds-ch:focus-visible{outline:2px solid currentColor;outline-offset:2px;} .ds-ch-on,.ds-ch-on:hover{background:#E5102B;}"
+      "refersTo": "preset-chip",
+      "description": "A Settings chip, the one place a pill is allowed, filled cherry when selected.",
+      "html": "<button class=\"ds-chip\">Calm</button> <button class=\"ds-chip ds-chip-on\">Dry</button>",
+      "css": ".ds-chip { height: 26px; padding: 0 10px; border: 0; border-radius: 9999px; background: rgba(127, 127, 127, 0.14); color: inherit; font: 500 12px -apple-system, sans-serif; cursor: pointer; } .ds-chip:hover { background: rgba(127, 127, 127, 0.22); } .ds-chip:focus-visible { outline: 2px solid #B5122A; outline-offset: 2px; } .ds-chip-on, .ds-chip-on:hover { background: #B5122A; color: #FFFFFF; }"
     }
   ],
   "narrative": {
-    "northStar": "The Cutting Lathe",
-    "overview": "The window is a single record, seen from directly above, too big for its frame. Everything said in the conversation is physically cut into it: your voice in white, the reply in yellow, spiralling outward from the label as a calendar of what was said. There is nothing to press. Clicking anywhere drops the arm; dragging around the disc scratches back through the talk.\n\nThe surface is loud and flat like a pressed sleeve. Colour runs at full strength over the whole window, heavy geometric type is printed straight onto the vinyl, and one colour change from across the room tells you the phase. Density is low on the stage: one status word, the words being said, a line of underlined controls and a line of small print. Depth comes from the record itself, not from interface layers.\n\nThe whole of it is driven by one mechanism. Rotation, groove age and a single travelling wavefront account for all stage motion, drawn by one Metal fragment shader, so a long conversation costs the GPU the same as a short one. The world refuses the category's glowing blob and round mic button. Settings is deliberately outside the world: native macOS forms with cherry accents.",
+    "northStar": "The Apparition",
+    "overview": "The window is a cold black room with something in it. A wasted, real-looking head hangs in fog, lit from one side so that half of it is lost, dissolving at its edges and slightly askew. Its eyes find your pointer and follow it slowly. When it speaks, its lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.\n\nDensity is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, bone relief, and blood only in the flesh and in the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.\n\nThe stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading one noise texture, so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.",
     "keyCharacteristics": [
-      "Full-strength cherry vinyl bleeding past every edge, with a cobalt label",
-      "White ink for you and yellow ink for the reply, on grooves, words and cartridge alike",
-      "Grooves that start hot and big, then cool and sink back into the vinyl",
-      "One wavefront carrying each change across the whole surface",
-      "Heavy type set directly on the vinyl, with no cards, pills or glass on the stage",
-      "Underlined words as controls, and the whole window as the talk control"
+      "A near-black ground that changes whole, turning oxblood while it thinks",
+      "A head of bone-grey relief, lit from one side, dissolving into fog at its edges",
+      "Lips and ripples driven only by live audio",
+      "Wet, bloodshot, milky eyes that look through the fog and follow the pointer anywhere on screen",
+      "Didot for large words, Avenir Next medium for small ones, cold white for you and bone for the reply",
+      "Controls as thin wisps of mist, with no pills, glass or hard edges, and the whole window as the talk control"
     ],
     "rules": [
       {
-        "name": "The Whole Disc Rule",
-        "body": "A phase colour changes the entire vinyl, never a badge, dot or patch on it. The state should read from across the room.",
+        "name": "The Whole Dark Rule",
+        "body": "A phase colour changes the entire ground, never a badge, dot or patch on it. The conversation's fog bank stays Void, so with it open only the band above the bank changes and the status word carries the phase.",
         "section": "colors"
       },
       {
-        "name": "The Two Inks Rule",
-        "body": "In grooves, spoken words and the cartridge, white is always you and yellow is always the reply. Yellow never carries interface text on the vinyl.",
+        "name": "The Two Voices Rule",
+        "body": "Cold white is you and bone is the reply, in words and ripples alike. System messages on the stage are cold white. Bone's only other uses are transcript errors and the copied checkmark.",
         "section": "colors"
       },
       {
-        "name": "The Full Strength Rule",
-        "body": "Words on the vinyl are pure white or pure yellow at full opacity. Yellow on cherry reaches 4.3:1, so it is set at 21pt or larger; white on cherry reaches 4.7:1. The only lowered values are disabled controls (50 to 55%) and the empty type field's prompt (80%, at 22pt). A line you cut off is still drawn at 72% in the build, which falls to 2.7:1 on cherry: that is a defect to fix, not a state to copy.",
+        "name": "The Cherry Stays Out Rule",
+        "body": "Cherry belongs to Settings. The stage's reds are flesh and the oxblood dark, and interface elements on the stage never use them.",
         "section": "colors"
+      },
+      {
+        "name": "The Inscription Rule",
+        "body": "Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in its two places, at 24pt on the stage and 13pt on the puck's backed mist.",
+        "section": "typography"
       },
       {
         "name": "The Whole String Rule",
-        "body": "Avenir Next has no Cyrillic, so any string containing an alphabetic character at or above U+0250 is set entirely in the system face at the same size and weight. Never let Avenir's punctuation mix into another script, and pass the string to the font choice wherever the text is user or model content.",
+        "body": "Didot and Avenir Next are Latin only, so any string containing an alphabetic character at or above U+0250 falls back whole to the system face at the same size, serif at 21pt and up. Never let their punctuation mix into another script, and pass the string to the font choice wherever the text is user or model content.",
         "section": "typography"
       },
       {
         "name": "The Size by Length Rule",
-        "body": "On the vinyl, text size follows length (34, 26, then 21pt) rather than role, so a short answer shouts and a long one still fits.",
+        "body": "On the stage, text size follows length (34, 26, then 21pt) rather than role, so a short answer is an inscription and a long one still fits.",
         "section": "typography"
       },
       {
-        "name": "The Tonearm Rule",
-        "body": "The arm is the only object that floats above the record. Interface elements stay printed on it.",
+        "name": "The One Side Rule",
+        "body": "The key light comes from the upper left and leaves the far half of the face in shadow. The only other light is a faint cold fill from below, so the shadows never go quite flat. Never add a second key or a rim.",
         "section": "elevation"
       },
       {
-        "name": "The Hot Groove Rule",
-        "body": "Only the groove being cut stands out. Anything older must cool into the vinyl, so the disc stays calm however long the talk runs.",
+        "name": "The Eyes Look Through Rule",
+        "body": "The eyes are drawn in front of the fog and the ripples. Whatever else the fog hides, it never covers the gaze.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Dissolving Edge Rule",
+        "body": "The head has no outline. It ends where its height falls into the noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Real Voice Rule",
+        "body": "Lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.",
         "section": "components"
       },
       {
-        "name": "The One Front Rule",
-        "body": "One wavefront crosses the disc at a time, at 1400pt a second from the centre, with the new colour inside it and the old one outside. A vinyl or label colour change strikes at full strength, entering hearing or speaking from a calm phase strikes at 0.6, and cutting into a reply strikes at 2.4 with no colour change. Phase changes that alter neither colour nor strike state send nothing.",
+        "name": "The One Wave Rule",
+        "body": "A phase change sends one dark wave from the mouth at 1400pt a second, with the new dark inside and the old outside and a soft 52pt edge. A change of ground strikes at full strength, entering hearing or speaking at 0.6, and cutting in at 2.4 with no change of colour. A new wave replaces the last.",
         "section": "components"
       },
       {
-        "name": "The Word Is the Control Rule",
-        "body": "Stage controls are underlined words. Icon-only buttons are kept to the top bar, the actions under a reply and the composer toggles. Nothing on the stage is a filled or pill-shaped button.",
+        "name": "The Mist Control Rule",
+        "body": "Stage controls are words in mist, with no fill, border or edge you could trace. Hovering makes the mist thicken, and nothing else about the word changes.",
         "section": "components"
       },
       {
         "name": "The No Mic Button Rule",
-        "body": "Talking starts from a click on the window or floating record, Space, the global shortcut or the menu bar item, never from a dedicated button in the window. Mute mic is a word, and it appears only once the mic is on.",
+        "body": "Talking starts from a click on the window or floating face, Space, the global shortcut or the menu bar item, never from a dedicated button in the window. Mute mic is a word, and it appears only once the mic is on.",
         "section": "components"
       },
       {
         "name": "The Native Settings Rule",
-        "body": "Settings is where the app stops performing. Add the cherry tint and the display-face header, and leave the rest to the system.",
+        "body": "Settings is where the app stops performing. Add the cherry tint and the Didot header, and leave the rest to the system. The past-conversations popover and the menus stay native too.",
         "section": "components"
       }
     ],
     "dos": [
-      "Do derive every moving part of the stage from the record's one mechanism: rotation, groove age and the wavefront.",
-      "Do drive grooves from the sound actually happening, in the owner's ink.",
-      "Do change state by changing the whole vinyl, and pair it with its status word.",
-      "Do set text straight on the vinyl in pure white or yellow, with the grooves hushed behind it.",
+      "Do drive lips and ripples from the sound actually happening, in the owner's ink.",
+      "Do change state by changing the whole dark or the face, and pair it with its status word.",
+      "Do keep the head real, askew and lit from one side, dissolving at its edges.",
+      "Do set stage text straight on the dark, with the fog calmed behind it.",
+      "Do make a new stage control a word in a wisp of mist.",
       "Do use the system face for the whole string when text contains any non-Latin script.",
-      "Do make a new stage control an underlined word (Text Action).",
-      "Do keep Settings native, adding only the cherry tint and the pane header.",
-      "Do respect Reduce Motion and pause drawing when idle or hidden: the language model needs the GPU."
+      "Do keep Settings native, adding only the cherry tint and the Didot pane header.",
+      "Do respect Reduce Motion and stop drawing when idle or hidden: the language model needs the GPU."
     ],
     "donts": [
-      "Don't add a glowing orb or blob, or a round mic button.",
-      "Don't put cards, pills or glass on the stage. The floating record's strips exist only because it has no vinyl beneath its text.",
-      "Don't add shadows to text or controls. The tonearm's shadow is the record's own.",
-      "Don't set yellow text on cherry below 21pt.",
-      "Don't dim words on the vinyl to show hierarchy; change size or weight, or move them to the sleeve.",
-      "Don't let old grooves stay bright, or add a second concurrent wavefront.",
+      "Don't add a glowing orb or blob, a friendly avatar, or a round mic button.",
+      "Don't make it cute or cartoonish: the owner rejected the cloud as childish.",
+      "Don't put cards, pills, glass or hard-edged containers on the stage.",
+      "Don't add shadows to text or controls.",
+      "Don't use cherry on the stage, or set interface elements in the flesh reds.",
+      "Don't set roman Didot below 21pt.",
+      "Don't add a second key light, or a second concurrent wave.",
+      "Don't make the head or the fog move fast: besides the voice-driven lips and blinks, only the lurch and the wave are quick.",
       "Don't add a button to start talking."
     ]
   }

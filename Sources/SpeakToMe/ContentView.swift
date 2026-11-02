@@ -151,7 +151,7 @@ private struct TopBar: View {
             Spacer(minLength: 8)
             ModelMenu()
             TopIconButton(systemImage: "pip.enter",
-                          help: shortcuts.floatingOrb.map { "Floating record (\($0.display))" } ?? "Floating record") {
+                          help: shortcuts.floatingOrb.map { "Floating face (\($0.display))" } ?? "Floating face") {
                 MiniOrbController.shared.toggle(session: session)
             }
             SettingsLink { TopIconLabel(systemImage: "slider.horizontal.3") }
