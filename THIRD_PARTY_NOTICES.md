@@ -51,3 +51,7 @@ None of these are in this repository. The app downloads them to `~/Library/Appli
 | [F5-TTS Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN) | Russian speech | **CC-BY-NC-4.0 (non-commercial)** |
 | [Vocos mel 24 kHz](https://huggingface.co/lucasnewman/vocos-mel-24khz) | Vocoder for F5-TTS | MIT |
 | [RUAccent dictionaries](https://huggingface.co/ruaccent/accentuator) | Russian word stress | MIT |
+
+## Portrait
+
+`Resources/persona.jpg` is cropped from "John Herschel" (1867) by Julia Margaret Cameron, in the public domain, from the Metropolitan Museum of Art's copy as restored by Adam Cuerden: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Julia_Margaret_Cameron_-_John_Herschel_(Metropolitan_Museum_of_Art_copy,_restored).jpg).

@@ -14,6 +14,7 @@ cp .build/release/SpeakToMe .build/mlx.metallib "$APP/Contents/MacOS/"
 cp -R .build/release/*.bundle "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] || scripts/make-icns.sh
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp Resources/persona.jpg "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

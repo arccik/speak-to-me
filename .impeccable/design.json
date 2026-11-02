@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-02T12:12:22Z",
+  "generatedAt": "2026-11-02T12:59:49Z",
   "title": "Design System: Speak to Me",
   "extensions": {
     "colorMeta": {
@@ -34,6 +34,36 @@
           "#F7EBEC"
         ]
       },
+      "hollow": {
+        "role": "neutral",
+        "displayName": "Hollow",
+        "canonical": "#040406",
+        "tonalRamp": [
+          "#0B0B0D",
+          "#252528",
+          "#414146",
+          "#616165",
+          "#828286",
+          "#A4A4A9",
+          "#C9C9CC",
+          "#EEEEEF"
+        ]
+      },
+      "you-ink": {
+        "role": "neutral",
+        "displayName": "Cold White",
+        "canonical": "#E9ECF1",
+        "tonalRamp": [
+          "#0A0B0D",
+          "#232529",
+          "#404246",
+          "#5F6166",
+          "#808287",
+          "#A2A5AA",
+          "#C7C9CC",
+          "#EEEEEF"
+        ]
+      },
       "reply-ink": {
         "role": "secondary",
         "displayName": "Reply Bone",
@@ -62,141 +92,6 @@
           "#ABA590",
           "#CDC9BB",
           "#F0EEEA"
-        ]
-      },
-      "flesh-lit": {
-        "role": "tertiary",
-        "displayName": "Flesh Lit",
-        "canonical": "#A89E8C",
-        "tonalRamp": [
-          "#0F0A04",
-          "#2C2415",
-          "#494131",
-          "#69604F",
-          "#8B8170",
-          "#AEA492",
-          "#CFC8BC",
-          "#F0EEEA"
-        ]
-      },
-      "flesh-bruised": {
-        "role": "tertiary",
-        "displayName": "Flesh Bruised",
-        "canonical": "#78696B",
-        "tonalRamp": [
-          "#10090A",
-          "#2E2123",
-          "#4C3E40",
-          "#6C5D5F",
-          "#8D7E80",
-          "#B1A0A2",
-          "#D1C6C7",
-          "#F1EDEE"
-        ]
-      },
-      "enamel": {
-        "role": "tertiary",
-        "displayName": "Enamel",
-        "canonical": "#BDAB78",
-        "tonalRamp": [
-          "#110A00",
-          "#2F2400",
-          "#50400A",
-          "#70602E",
-          "#92814F",
-          "#B6A471",
-          "#D4C9A7",
-          "#F2EEE4"
-        ]
-      },
-      "rot": {
-        "role": "tertiary",
-        "displayName": "Rot",
-        "canonical": "#664721",
-        "tonalRamp": [
-          "#150800",
-          "#371F00",
-          "#593B14",
-          "#7A5A34",
-          "#9D7B55",
-          "#C19E76",
-          "#DDC5AA",
-          "#F5EDE5"
-        ]
-      },
-      "gum": {
-        "role": "tertiary",
-        "displayName": "Gum",
-        "canonical": "#330A0D",
-        "tonalRamp": [
-          "#190405",
-          "#3F1517",
-          "#603333",
-          "#835251",
-          "#A67372",
-          "#CB9594",
-          "#E4BFBD",
-          "#F7EBEB"
-        ]
-      },
-      "vein": {
-        "role": "tertiary",
-        "displayName": "Vein",
-        "canonical": "#751412",
-        "tonalRamp": [
-          "#210000",
-          "#4D0003",
-          "#791815",
-          "#9E3D35",
-          "#C55F55",
-          "#EC8377",
-          "#FDB4AA",
-          "#FFE9E5"
-        ]
-      },
-      "milk-iris": {
-        "role": "tertiary",
-        "displayName": "Milk Iris",
-        "canonical": "#B3BDB8",
-        "tonalRamp": [
-          "#080C0A",
-          "#1F2723",
-          "#3C4440",
-          "#5B645F",
-          "#7C8580",
-          "#9EA8A3",
-          "#C4CBC8",
-          "#EDEFEE"
-        ]
-      },
-      "you-ink": {
-        "role": "neutral",
-        "displayName": "Cold White",
-        "canonical": "#E9ECF1",
-        "tonalRamp": [
-          "#0A0B0D",
-          "#232529",
-          "#404246",
-          "#5F6166",
-          "#808287",
-          "#A2A5AA",
-          "#C7C9CC",
-          "#EEEEEF"
-        ]
-      },
-      "hollow": {
-        "role": "neutral",
-        "displayName": "Hollow",
-        "canonical": "#040406",
-        "tonalRamp": [
-          "#0B0B0D",
-          "#252528",
-          "#414146",
-          "#616165",
-          "#828286",
-          "#A4A4A9",
-          "#C9C9CC",
-          "#EEEEEF"
         ]
       },
       "fog": {
@@ -229,21 +124,6 @@
           "#EDEEF2"
         ]
       },
-      "cherry": {
-        "role": "neutral",
-        "displayName": "Cherry",
-        "canonical": "#B5122A",
-        "tonalRamp": [
-          "#200001",
-          "#4D0009",
-          "#7E071A",
-          "#B4112A",
-          "#DD434A",
-          "#FE7272",
-          "#FDB3AF",
-          "#FEE9E7"
-        ]
-      },
       "wisp-rest": {
         "role": "neutral",
         "displayName": "Wisp Rest",
@@ -272,6 +152,246 @@
           "#9DA5B5",
           "#C3C9D4",
           "#EDEEF2"
+        ]
+      },
+      "grade-shadow": {
+        "role": "tertiary",
+        "displayName": "Grade Shadow",
+        "canonical": "#8094B8",
+        "tonalRamp": [
+          "#020A1F",
+          "#152441",
+          "#314261",
+          "#4F6183",
+          "#6F83A6",
+          "#91A6CA",
+          "#BCCAE3",
+          "#EAEFF7"
+        ]
+      },
+      "grade-light": {
+        "role": "tertiary",
+        "displayName": "Grade Light",
+        "canonical": "#FAEDCC",
+        "tonalRamp": [
+          "#110A00",
+          "#2E2407",
+          "#4C4125",
+          "#6C6043",
+          "#8D8163",
+          "#B0A485",
+          "#D1C9B4",
+          "#F1EEE8"
+        ]
+      },
+      "clouded-iris": {
+        "role": "tertiary",
+        "displayName": "Clouded Iris",
+        "canonical": "#B8B8A8",
+        "tonalRamp": [
+          "#0C0C04",
+          "#262619",
+          "#434335",
+          "#626254",
+          "#848374",
+          "#A6A697",
+          "#CACABF",
+          "#EFEFEB"
+        ]
+      },
+      "eye-blood": {
+        "role": "tertiary",
+        "displayName": "Eye Blood",
+        "canonical": "#6B1F1A",
+        "tonalRamp": [
+          "#220000",
+          "#4D0002",
+          "#71251F",
+          "#95463D",
+          "#BB675D",
+          "#E18A7F",
+          "#F5B8B0",
+          "#FDE9E6"
+        ]
+      },
+      "glint": {
+        "role": "tertiary",
+        "displayName": "Glint",
+        "canonical": "#E0EDFF",
+        "tonalRamp": [
+          "#060B15",
+          "#1C2633",
+          "#384351",
+          "#576271",
+          "#788393",
+          "#9AA6B7",
+          "#C2CAD5",
+          "#ECEFF2"
+        ]
+      },
+      "enamel": {
+        "role": "tertiary",
+        "displayName": "Enamel",
+        "canonical": "#BDAB78",
+        "tonalRamp": [
+          "#110A00",
+          "#2F2400",
+          "#50400A",
+          "#70602E",
+          "#92814F",
+          "#B6A471",
+          "#D4C9A7",
+          "#F2EEE4"
+        ]
+      },
+      "rot": {
+        "role": "tertiary",
+        "displayName": "Rot",
+        "canonical": "#664721",
+        "tonalRamp": [
+          "#150800",
+          "#371F00",
+          "#593B14",
+          "#7A5A34",
+          "#9D7B55",
+          "#C19E76",
+          "#DDC5AA",
+          "#F5EDE5"
+        ]
+      },
+      "tooth-stain": {
+        "role": "tertiary",
+        "displayName": "Tooth Stain",
+        "canonical": "#21140A",
+        "tonalRamp": [
+          "#120903",
+          "#302217",
+          "#4E3E33",
+          "#6E5E52",
+          "#907F72",
+          "#B3A194",
+          "#D3C6BE",
+          "#F1EEEB"
+        ]
+      },
+      "gum": {
+        "role": "tertiary",
+        "displayName": "Gum",
+        "canonical": "#330A0D",
+        "tonalRamp": [
+          "#190405",
+          "#3F1517",
+          "#603333",
+          "#835251",
+          "#A67372",
+          "#CB9594",
+          "#E4BFBD",
+          "#F7EBEB"
+        ]
+      },
+      "tongue": {
+        "role": "tertiary",
+        "displayName": "Tongue",
+        "canonical": "#2B0F13",
+        "tonalRamp": [
+          "#180507",
+          "#381B1F",
+          "#58383B",
+          "#79565A",
+          "#9C777A",
+          "#C09A9D",
+          "#DCC1C3",
+          "#F5ECED"
+        ]
+      },
+      "wet-flesh": {
+        "role": "tertiary",
+        "displayName": "Wet Flesh",
+        "canonical": "#160809",
+        "tonalRamp": [
+          "#130808",
+          "#302021",
+          "#4F3D3D",
+          "#6F5C5C",
+          "#917C7D",
+          "#B59FA0",
+          "#D4C5C5",
+          "#F2EDED"
+        ]
+      },
+      "flesh-lit": {
+        "role": "tertiary",
+        "displayName": "Flesh Lit",
+        "canonical": "#A89E8C",
+        "tonalRamp": [
+          "#0F0A04",
+          "#2C2415",
+          "#494131",
+          "#69604F",
+          "#8B8170",
+          "#AEA492",
+          "#CFC8BC",
+          "#F0EEEA"
+        ]
+      },
+      "flesh-bruised": {
+        "role": "tertiary",
+        "displayName": "Flesh Bruised",
+        "canonical": "#78696B",
+        "tonalRamp": [
+          "#10090A",
+          "#2E2123",
+          "#4C3E40",
+          "#6C5D5F",
+          "#8D7E80",
+          "#B1A0A2",
+          "#D1C6C7",
+          "#F1EDEE"
+        ]
+      },
+      "vein": {
+        "role": "tertiary",
+        "displayName": "Vein",
+        "canonical": "#751412",
+        "tonalRamp": [
+          "#210000",
+          "#4D0003",
+          "#791815",
+          "#9E3D35",
+          "#C55F55",
+          "#EC8377",
+          "#FDB4AA",
+          "#FFE9E5"
+        ]
+      },
+      "milk-iris": {
+        "role": "tertiary",
+        "displayName": "Milk Iris",
+        "canonical": "#B3BDB8",
+        "tonalRamp": [
+          "#080C0A",
+          "#1F2723",
+          "#3C4440",
+          "#5B645F",
+          "#7C8580",
+          "#9EA8A3",
+          "#C4CBC8",
+          "#EDEFEE"
+        ]
+      },
+      "cherry": {
+        "role": "neutral",
+        "displayName": "Cherry",
+        "canonical": "#B5122A",
+        "tonalRamp": [
+          "#200001",
+          "#4D0009",
+          "#7E071A",
+          "#B4112A",
+          "#DD434A",
+          "#FE7272",
+          "#FDB3AF",
+          "#FEE9E7"
         ]
       }
     },
@@ -318,14 +438,20 @@
       },
       "puck-caption": {
         "displayName": "Puck caption",
-        "purpose": "The floating face's status."
+        "purpose": "The floating face's status, on backed mist."
       },
       "puck-snippet": {
         "displayName": "Puck snippet",
         "purpose": "The words in flight under the floating face."
       }
     },
-    "shadows": [],
+    "shadows": [
+      {
+        "name": "icon-tile",
+        "value": "0 14px 28px rgba(0, 0, 0, 0.35)",
+        "purpose": "The app icon's tile on the macOS grid only, at 1024 pixels. Nothing in the app casts a shadow."
+      }
+    ],
     "motion": [
       {
         "name": "phase-wave",
@@ -340,7 +466,7 @@
       {
         "name": "jaw",
         "value": "exp 34/s opening, 20/s closing",
-        "purpose": "Lips following the voice."
+        "purpose": "The photograph's jaw and lips following the voice."
       },
       {
         "name": "gaze",
@@ -401,6 +527,16 @@
         "name": "dock-change",
         "value": "0.18s ease-out",
         "purpose": "Action row to type field."
+      },
+      {
+        "name": "head-make-room",
+        "value": "exp 5/s",
+        "purpose": "The head rising and drawing back as the words grow."
+      },
+      {
+        "name": "head-peek",
+        "value": "exp 7/s",
+        "purpose": "The head shrinking to sit above the open conversation."
       },
       {
         "name": "doze",
@@ -482,7 +618,7 @@
       "refersTo": "puck-caption",
       "description": "The floating face's status on firm mist backed by a darkened layer, readable over any desktop.",
       "html": "<div class=\"ds-puck\">Listening</div>",
-      "css": ".ds-puck { position: relative; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; color: #E9ECF1; font: italic 400 13px Didot, ui-serif, serif; isolation: isolate; } .ds-puck::before { content: ''; position: absolute; inset: -8px -14px; z-index: -1; background: radial-gradient(ellipse closest-side, rgba(7, 8, 12, 0.9) 55%, transparent), radial-gradient(ellipse closest-side, rgba(169, 178, 194, 0.3) 55%, transparent); filter: blur(3px); }"
+      "css": ".ds-puck { position: relative; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; color: #E9ECF1; font: 500 12px 'Avenir Next', -apple-system, sans-serif; isolation: isolate; } .ds-puck::before { content: ''; position: absolute; inset: -8px -14px; z-index: -1; background: radial-gradient(ellipse closest-side, rgba(7, 8, 12, 0.9) 55%, transparent), radial-gradient(ellipse closest-side, rgba(169, 178, 194, 0.3) 55%, transparent); filter: blur(3px); }"
     },
     {
       "name": "Personality Chip",
@@ -495,12 +631,12 @@
   ],
   "narrative": {
     "northStar": "The Apparition",
-    "overview": "The window is a cold black room with something in it. A wasted, real-looking head hangs in fog, lit from one side so that half of it is lost, dissolving at its edges and slightly askew. Its eyes find your pointer and follow it slowly. When it speaks, its lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.\n\nDensity is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, bone relief, and blood only in the flesh and in the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.\n\nThe stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading one noise texture, so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.",
+    "overview": "The window is a cold black room with something in it. A real photograph, Julia Margaret Cameron's 1867 portrait of an old man, hangs in fog, graded cold in shadow and bone in the light, with its far side falling away and its edges dissolving. Its clouded eyes find your pointer and follow it slowly. When it speaks, the photograph's own jaw and lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.\n\nDensity is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, a portrait running from cold shadow to bone, and blood only in the mouth, the eyes and the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.\n\nThe stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading three textures (the portrait, one noise tile and a short history of sound), so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.",
     "keyCharacteristics": [
       "A near-black ground that changes whole, turning oxblood while it thinks",
-      "A head of bone-grey relief, lit from one side, dissolving into fog at its edges",
-      "Lips and ripples driven only by live audio",
-      "Wet, bloodshot, milky eyes that look through the fog and follow the pointer anywhere on screen",
+      "A real photograph, graded rather than redrawn, its far side falling away and its edges dissolving into fog",
+      "A jaw, lips and ripples driven only by live audio",
+      "The photograph's own eyes, clouded and threaded with blood, following the pointer anywhere on screen",
       "Didot for large words, Avenir Next medium for small ones, cold white for you and bone for the reply",
       "Controls as thin wisps of mist, with no pills, glass or hard edges, and the whole window as the talk control"
     ],
@@ -517,12 +653,12 @@
       },
       {
         "name": "The Cherry Stays Out Rule",
-        "body": "Cherry belongs to Settings. The stage's reds are flesh and the oxblood dark, and interface elements on the stage never use them.",
+        "body": "Cherry belongs to Settings. The stage's reds are the mouth, the blood in the eyes and the oxblood dark, and interface elements on the stage never use them.",
         "section": "colors"
       },
       {
         "name": "The Inscription Rule",
-        "body": "Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in its two places, at 24pt on the stage and 13pt on the puck's backed mist.",
+        "body": "Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in one place, the 24pt status word.",
         "section": "typography"
       },
       {
@@ -537,22 +673,32 @@
       },
       {
         "name": "The One Side Rule",
-        "body": "The key light comes from the upper left and leaves the far half of the face in shadow. The only other light is a faint cold fill from below, so the shadows never go quite flat. Never add a second key or a rim.",
+        "body": "The only light on the head is the one in the photograph. The grade adds no light: it deepens the contrast and darkens towards the viewer's right, from 108% to 42% across the head, so the far side falls away. Never add a key or a rim.",
         "section": "elevation"
       },
       {
-        "name": "The Eyes Look Through Rule",
-        "body": "The eyes are drawn in front of the fog and the ripples. Whatever else the fog hides, it never covers the gaze.",
+        "name": "The Look Through Rule",
+        "body": "The fog may cross the eyes, but not the gaze. The cold point in each pupil is added after the veil, and it grows brighter as the eyes widen, so the gaze still reads through the fog.",
         "section": "elevation"
       },
       {
         "name": "The Dissolving Edge Rule",
-        "body": "The head has no outline. It ends where its height falls into the noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.",
+        "body": "The head has no outline, and the photograph's rectangle never shows. It ends in an oval reaching about 222 by 262 units from its centre, broken by noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.",
         "section": "elevation"
       },
       {
+        "name": "The Real Photograph Rule",
+        "body": "The head is the photograph at `Resources/persona.jpg`, with its provenance in `THIRD_PARTY_NOTICES.md`. Never replace it with a drawn or generated face, and any other portrait needs the same public-domain record.",
+        "section": "components"
+      },
+      {
+        "name": "The Found Features Rule",
+        "body": "What the camera saw stays the camera's: skin, lips, lids, irises and hair are warped or tinted, never drawn. Paint only what it never saw: the inside of the mouth, the cloud and blood over the eyes, and the cold point in each pupil.",
+        "section": "components"
+      },
+      {
         "name": "The Real Voice Rule",
-        "body": "Lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.",
+        "body": "The jaw, lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.",
         "section": "components"
       },
       {
@@ -577,9 +723,9 @@
       }
     ],
     "dos": [
-      "Do drive lips and ripples from the sound actually happening, in the owner's ink.",
+      "Do drive the jaw, lips and ripples from the sound actually happening, in the owner's ink.",
       "Do change state by changing the whole dark or the face, and pair it with its status word.",
-      "Do keep the head real, askew and lit from one side, dissolving at its edges.",
+      "Do keep the head the real photograph, graded and warped rather than redrawn, with its far side falling away and its edges dissolving.",
       "Do set stage text straight on the dark, with the fog calmed behind it.",
       "Do make a new stage control a word in a wisp of mist.",
       "Do use the system face for the whole string when text contains any non-Latin script.",
@@ -591,10 +737,10 @@
       "Don't make it cute or cartoonish: the owner rejected the cloud as childish.",
       "Don't put cards, pills, glass or hard-edged containers on the stage.",
       "Don't add shadows to text or controls.",
-      "Don't use cherry on the stage, or set interface elements in the flesh reds.",
+      "Don't use cherry on the stage, or set interface elements in the mouth or eye reds.",
       "Don't set roman Didot below 21pt.",
-      "Don't add a second key light, or a second concurrent wave.",
-      "Don't make the head or the fog move fast: besides the voice-driven lips and blinks, only the lurch and the wave are quick.",
+      "Don't relight the photograph, draw over its features, or add a second concurrent wave.",
+      "Don't make the head or the fog move fast: besides the voice-driven jaw and blinks, only the lurch and the wave are quick.",
       "Don't add a button to start talking."
     ]
   }

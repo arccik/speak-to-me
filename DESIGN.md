@@ -1,6 +1,6 @@
 ---
 name: Speak to Me
-description: A local voice assistant that speaks through a wasted face hanging in black fog.
+description: A local voice assistant that speaks through a real 1867 photograph that comes alive in black fog.
 colors:
   void: "#07080C"
   oxblood: "#2C060C"
@@ -12,11 +12,19 @@ colors:
   mist: "#A9B2C2"
   wisp-rest: "rgba(169, 178, 194, 0.17)"
   wisp-firm: "rgba(169, 178, 194, 0.3)"
-  flesh-lit: "#A89E8C"
-  flesh-bruised: "#78696B"
+  grade-shadow: "#8094B8"
+  grade-light: "#FAEDCC"
+  clouded-iris: "#B8B8A8"
+  eye-blood: "#6B1F1A"
+  glint: "#E0EDFF"
   enamel: "#BDAB78"
   rot: "#664721"
+  tooth-stain: "#21140A"
   gum: "#330A0D"
+  tongue: "#2B0F13"
+  wet-flesh: "#160809"
+  flesh-lit: "#A89E8C"
+  flesh-bruised: "#78696B"
   vein: "#751412"
   milk-iris: "#B3BDB8"
   cherry: "#B5122A"
@@ -62,9 +70,9 @@ typography:
     fontSize: "12px"
     fontWeight: 500
   puck-caption:
-    fontFamily: "Didot-Italic, Didot, serif"
-    fontSize: "13px"
-    fontWeight: 400
+    fontFamily: "Avenir Next, -apple-system, sans-serif"
+    fontSize: "12px"
+    fontWeight: 500
   puck-snippet:
     fontFamily: "Avenir Next, -apple-system, sans-serif"
     fontSize: "11px"
@@ -161,23 +169,23 @@ components:
 
 **Creative North Star: "The Apparition"**
 
-The window is a cold black room with something in it. A wasted, real-looking head hangs in fog, lit from one side so that half of it is lost, dissolving at its edges and slightly askew. Its eyes find your pointer and follow it slowly. When it speaks, its lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.
+The window is a cold black room with something in it. A real photograph, Julia Margaret Cameron's 1867 portrait of an old man, hangs in fog, graded cold in shadow and bone in the light, with its far side falling away and its edges dissolving. Its clouded eyes find your pointer and follow it slowly. When it speaks, the photograph's own jaw and lips move with the voice you are actually hearing, and the mouth opens further than a jaw should on crooked, stained, partly missing teeth.
 
-Density is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, bone relief, and blood only in the flesh and in the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.
+Density is low. There is one status word in Didot italic, the words being said in Didot, and a few controls that are only thin wisps of mist with a word in them. Colour barely exists: near-black ground, grey fog, a portrait running from cold shadow to bone, and blood only in the mouth, the eyes and the red dark of Thinking. The register is serious, mysterious and creepy, and the owner has rejected a cute version as childish.
 
-The stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading one noise texture, so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.
+The stage is almost still, then rarely violent. Everything drifts slowly, one dark wave leaves the mouth when the phase changes, and the head only moves fast in the lurch when you cut in. All of it is one Metal fragment shader reading three textures (the portrait, one noise tile and a short history of sound), so a long conversation costs the GPU the same as a short one, and drawing stops when the window is hidden or the face has dozed off. Settings is deliberately outside this world: native macOS forms with a cherry tint.
 
 **Key Characteristics:**
 - A near-black ground that changes whole, turning oxblood while it thinks
-- A head of bone-grey relief, lit from one side, dissolving into fog at its edges
-- Lips and ripples driven only by live audio
-- Wet, bloodshot, milky eyes that look through the fog and follow the pointer anywhere on screen
+- A real photograph, graded rather than redrawn, its far side falling away and its edges dissolving into fog
+- A jaw, lips and ripples driven only by live audio
+- The photograph's own eyes, clouded and threaded with blood, following the pointer anywhere on screen
 - Didot for large words, Avenir Next medium for small ones, cold white for you and bone for the reply
 - Controls as thin wisps of mist, with no pills, glass or hard edges, and the whole window as the talk control
 
 ## Colors
 
-A cold near-black with almost no chroma, where the only warmth is bone and the only red is flesh.
+A cold near-black with almost no chroma, where the only warmth is bone and the only red is blood.
 
 ### Primary
 - **Void** (#07080C): The ground in loading, ready, listening, hearing and speaking, and the opaque fill of the conversation's fog bank.
@@ -188,10 +196,12 @@ A cold near-black with almost no chroma, where the only warmth is bone and the o
 - **Long Reply Bone** (#D8D2BC): Reply text in the conversation, slightly less yellow for reading at length (13.2:1 on Void).
 
 ### Tertiary
-- **Flesh Lit** (#A89E8C) and **Flesh Bruised** (#78696B): The skin, blended by slow blotches and multiplied by the light. They are shader materials, never interface colours.
-- **Enamel** (#BDAB78) and **Rot** (#664721): The two ends of a tooth, chosen per tooth.
-- **Gum** (#330A0D) and **Vein** (#751412): Dark gums, and the blood in the whites of the eyes.
-- **Milk Iris** (#B3BDB8): The clouded iris around a pinprick pupil.
+- **Grade Shadow** (#8094B8) and **Grade Light** (#FAEDCC): The two ends of the portrait's grade, cold in shadow and bone in the light. Both are multiplied by the photograph's own brightness, so neither ever shows at full strength. They are shader materials, never interface colours.
+- **Clouded Iris** (#B8B8A8) and **Eye Blood** (#6B1F1A): The milky layer over the photograph's irises, and the threads of blood through it.
+- **Glint** (#E0EDFF): The cold point in each pupil.
+- **Enamel** (#BDAB78), **Rot** (#664721) and **Tooth Stain** (#21140A): The two ends of a tooth, chosen per tooth, and the stain where it meets the gum.
+- **Gum** (#330A0D), **Tongue** (#2B0F13) and **Wet Flesh** (#160809): The inside of the mouth, which falls to near black at the throat.
+- **Flesh Lit** (#A89E8C), **Flesh Bruised** (#78696B), **Vein** (#751412) and **Milk Iris** (#B3BDB8): The app icon's drawn head only, never the stage.
 
 ### Neutral
 - **Cold White** (#E9ECF1): Your words and ripples, and all interface text and symbols (16.9:1 on Void). It is deliberately not pure white.
@@ -205,13 +215,13 @@ A cold near-black with almost no chroma, where the only warmth is bone and the o
 | Status word | Dark | Eyes | Look | Frames a second |
 | --- | --- | --- | --- | --- |
 | Warming up | Void | Shut | Sunk well back, ignores the pointer | 15 |
-| Ready | Void | Open | Faintest smile, lips just parted, teeth showing | 15 |
-| Listening | Void | Slightly wide | Brows a little up | 30 |
-| Mic muted | Hollow | A third open | One brow up, sunk back | 30 |
-| Hearing you | Void | Wide | Brows up, slight tilt | 30 |
-| Thinking | Oxblood | Rolled back | One brow up, sunk back | 15 |
+| Ready | Void | Open | Lips just parted, watching | 15 |
+| Listening | Void | Slightly wide | Forehead a little up | 30 |
+| Mic muted | Hollow | A third open | Forehead up on one side, sunk back | 30 |
+| Hearing you | Void | Wide | Forehead up, slight tilt | 30 |
+| Thinking | Oxblood | Rolled back | Forehead up on one side, sunk back | 15 |
 | Speaking | Void | Open | Follows the pointer at 60%, lips on the voice | 30 |
-| Stuck | Hollow | Nearly shut | Brows drooped, ignores the pointer, light at 55% | 15 |
+| Stuck | Hollow | Nearly shut | Sunk back, ignores the pointer, light at 55% | 15 |
 
 Every phase has its status word, so colour and motion are never the only signal.
 
@@ -221,7 +231,7 @@ Every phase has its status word, so colour and motion are never the only signal.
 
 **The Two Voices Rule.** Cold white is you and bone is the reply, in words and ripples alike. System messages on the stage are cold white. Bone's only other uses are transcript errors and the copied checkmark.
 
-**The Cherry Stays Out Rule.** Cherry belongs to Settings. The stage's reds are flesh and the oxblood dark, and interface elements on the stage never use them.
+**The Cherry Stays Out Rule.** Cherry belongs to Settings. The stage's reds are the mouth, the blood in the eyes and the oxblood dark, and interface elements on the stage never use them.
 
 ## Typography
 
@@ -241,11 +251,11 @@ Every phase has its status word, so colour and motion are never the only signal.
 - **Error line** (Avenir Next medium, 14pt): Transcript errors, with a warning symbol.
 - **Action** (Avenir Next medium, 13pt): Words in wisps, and mic notices.
 - **Small print** (Avenir Next medium, 12pt): The hint line, tool notes, "You cut in here" and the model menu.
-- **Puck** (Didot italic, 13pt caption; Avenir Next medium, 11pt snippet): The floating face's text.
+- **Puck** (Avenir Next medium, 12pt caption and 11pt snippet): The floating face's text.
 
 ### Named Rules
 
-**The Inscription Rule.** Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in its two places, at 24pt on the stage and 13pt on the puck's backed mist.
+**The Inscription Rule.** Set by size: 21pt and up is Didot, below that is Avenir Next medium. The italic stamp is the one exception, and it stays in one place, the 24pt status word.
 
 **The Whole String Rule.** Didot and Avenir Next are Latin only, so any string containing an alphabetic character at or above U+0250 falls back whole to the system face at the same size, serif at 21pt and up. Never let their punctuation mix into another script, and pass the string to the font choice wherever the text is user or model content.
 
@@ -253,7 +263,7 @@ Every phase has its status word, so colour and motion are never the only signal.
 
 ## Layout
 
-The main window defaults to 520 by 800pt and stops at 440 by 640pt, with a hidden title bar. It is one composition, not a grid. The head hangs horizontally centred, 478 units tall, at up to 1 unit per point at the default width and at most 1.45. It takes the room between 44pt from the top and 12pt above the words, placed 42% of the way down the spare space. As the words block grows from 130 to 300pt the head draws back to 78% as well as rising, easing into place rather than snapping.
+The main window defaults to 520 by 800pt and stops at 440 by 640pt, with a hidden title bar. It is one composition, not a grid. The head has its own unit, set by the photograph: 122 units from the eye line to the mouth, with the eyes levelled. The head hangs horizontally centred, 478 units tall, at up to 1 unit per point at the default width and at most 1.45. It takes the room between 44pt from the top and 26pt above the words, placed 42% of the way down the spare space. As the words block grows from 130 to 300pt the head draws back to 78% as well as rising, easing into place rather than snapping.
 
 Content hangs on a 22pt margin. The top bar is 30pt tall and shares the traffic lights' row, with 76pt reserved at its leading edge and 10pt at its trailing edge. The status word sits 8pt below it, in the free dark at top left. The words sit at the bottom left in a block up to 620pt wide (560pt when empty), 18pt above the dock, with 16pt below the small print. The dock is inset a further 6pt and holds its action row 11pt above the hint. Wisps in a row sit 26pt apart, and suggested prompts 24pt.
 
@@ -263,35 +273,42 @@ Settings is fixed at 720 by 560pt with a 190pt sidebar and a 28pt header margin.
 
 ## Elevation & Depth
 
-There are no drop shadows, cards, blur panels or glass anywhere on the stage. Depth comes from fog in planes, painted back to front: the dark, haze thickening towards the bottom, the head, a veil of fog drifting across the face, voice ripples that thin out as they reach it, the eyes, and the falling breath. Each plane drifts at its own slow speed, so the room has depth while almost nothing moves. Interface text sits on top, and the dark calms behind it: ripples, breath and the wave's crest fall to 20% over a 70pt ramp above the words and to 12% behind the top bar, and the haze falls by about half. The head's own relief comes from a normal-lit height field, with sockets, nostrils and throat falling away into real dark.
+There are no drop shadows, cards, blur panels or glass anywhere on the stage. Depth comes from fog in planes, painted back to front: the dark, haze thickening towards the bottom, the wave's faint crest, the portrait, voice ripples that thin out as they reach it, a veil of fog drifting across the face, a cold point in each pupil, and the falling breath. Each plane drifts at its own slow speed, so the room has depth while almost nothing moves. Interface text sits on top, and the dark calms behind it: ripples, breath and the wave's crest fall to 20% over a 70pt ramp above the words and to 12% behind the top bar, and the haze falls by about half. The head's relief is the photograph's own, deepened by the grade, with sockets and throat falling away into real dark.
 
 ### Named Rules
 
-**The One Side Rule.** The key light comes from the upper left and leaves the far half of the face in shadow. The only other light is a faint cold fill from below, so the shadows never go quite flat. Never add a second key or a rim.
+**The One Side Rule.** The only light on the head is the one in the photograph. The grade adds no light: it deepens the contrast and darkens towards the viewer's right, from 108% to 42% across the head, so the far side falls away. Never add a key or a rim.
 
-**The Eyes Look Through Rule.** The eyes are drawn in front of the fog and the ripples. Whatever else the fog hides, it never covers the gaze.
+**The Look Through Rule.** The fog may cross the eyes, but not the gaze. The cold point in each pupil is added after the veil, and it grows brighter as the eyes widen, so the gaze still reads through the fog.
 
-**The Dissolving Edge Rule.** The head has no outline. It ends where its height falls into the noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.
+**The Dissolving Edge Rule.** The head has no outline, and the photograph's rectangle never shows. It ends in an oval reaching about 222 by 262 units from its centre, broken by noise, and while thinking or dozing it sinks back, to a little over half its opacity at the most.
 
 ## Shapes
 
-The stage has no corners and no drawn containers. Its forms are organic: a slightly askew head, lips that taper to points with a dip at the centre, teeth that come to points or snap off, and irregular wisps that trail off in strands. Ripples are the one geometric form, evenly spaced around the mouth, and even they bend with the voice's loudness. The fog bank's top edge is a soft fade over 3% of its height. Settings uses native macOS corners, with 6pt key caps, 8pt text areas and fully rounded personality chips.
+The stage has no corners and no drawn containers. Its forms are organic: a head that ends in a broken oval, a mouth that opens as a lens tapering to its corners, teeth that come to points or snap off, and irregular wisps that trail off in strands. Ripples are the one geometric form, evenly spaced around the mouth, and even they bend with the voice's loudness. The fog bank's top edge is a soft fade over 3% of its height. Settings uses native macOS corners, with 6pt key caps, 8pt text areas and fully rounded personality chips.
 
 ## Components
 
 ### The Apparition
-The signature component and the only stage graphic: one fragment shader, a 256-square tiling noise and a two-channel sound history.
-- **Lips:** Three live bands of the reply's voice drive them. Loudness opens the jaw, the balance of low to middle frequencies rounds or stretches the lips against this voice's own average, and a hiss closes the jaw by up to 65%. The jaw opens fast and closes a little slower. The upper lip barely moves.
-- **Mouth:** Thin cracked lips around wet flesh, a black throat, a tongue lying low and dark gums. Teeth stay the same size however far it opens, so the lips reveal them. Each is its own length and lean, and about one in eight is missing and about one in three snapped.
-- **Eyes:** Hollow sockets, heavy lids, bloodshot whites, a milky iris and a pinprick pupil. Gaze eases slowly to the pointer anywhere on screen, or to random glances once the pointer has been still for 20 seconds. Blinks come every 4 to 11 seconds, and on most phase changes. While thinking they roll back.
+The signature component and the only stage graphic: one fragment shader, the portrait, a 256-square tiling noise and a two-channel sound history.
+- **Portrait:** Cropped from "John Herschel" (1867), 1522 by 1800 pixels. Apple Vision finds the eyes, outer lips and chin once when the renderer loads, so the jaw and eyes move where the photograph's really are. Positions measured on this portrait stand in if Vision finds nothing.
+- **Grade:** Brightness is read from the photo, lifted in contrast, then tinted from Grade Shadow to Grade Light. Fine fog noise varies it by about 7% either way, and Stuck dims it to 55%.
+- **Jaw and lips:** Three live bands of the reply's voice drive them. Loudness opens the jaw, the balance of low to middle frequencies rounds or stretches the mouth by up to 20% against this voice's own average, and a hiss closes the jaw by up to 65%. The jaw opens fast and closes a little slower. The upper lip takes 20% of the opening and the jaw 80%, pulling the skin of the chin with it over far more distance than it moves, so the skin stretches instead of smearing. The warp is gone 150 units below the chin.
+- **Mouth:** A dark opening that replaces the lips' parting line, with a black throat, a tongue lying low and dark gums, dimmer the less it opens and falling away on the far side like the face. Teeth stay the same size however far it opens, so the lips reveal them. Each is its own length and lean, and about one in eight is missing and about one in three snapped. They are stained at the gum and wet across the face.
+- **Eyes:** The photograph's own irises are warped to look, inside an almond set by the eye Vision found, and its own lid closes over them by pulling skin down from above. Clouded Iris lies over them at 62%, with threads of Eye Blood at up to 28%. Gaze eases slowly to the pointer anywhere on screen, or to random glances once the pointer has been still for 20 seconds. Blinks come every 4 to 11 seconds, and on most phase changes. While thinking they roll back.
+- **Forehead:** The skin above the eyes rides up by 7 units per unit of lift, with phase, emphasis in the voice and your own voice, and it can lift on one side.
 - **Breath:** Cold mist falling from the mouth, only as strong as the voice. Stage only.
-- **Ripples:** Voices disturb the fog at 30% strength, 42 units apart, carrying about four seconds of sound. The reply's move out from the mouth in bone and yours close in on it in cold white. Stage only.
-- **The lurch:** Talking over a reply throws the head about 10% towards you, flares the eyes, lifts the brows and shuts the mouth, and it settles over about a second. It comes with the strongest wave.
+- **Ripples:** Voices disturb the fog, the reply at 30% strength and yours at 22%, 42 units apart, carrying about four seconds of sound. The reply's move out from the mouth in bone and yours close in on it in cold white. Stage only.
+- **The lurch:** Talking over a reply throws the head about 10% towards you, flares the eyes, lifts the forehead and shuts the mouth, and it settles over about a second. It comes with the strongest wave.
 - **Dozing off:** After 40 seconds in Ready with nobody around, the eyes close and the head sinks back, and at 45 seconds drawing stops. Loading and Stuck stop at 45 seconds without that fade. The pointer wakes it.
 - **Cost:** 30 frames a second while listening, hearing or speaking, and 15 otherwise. It also pauses whenever the window is hidden or covered.
-- **Reduce Motion:** The fog holds still and the tilt and bob stop, with no ripples, waves, breath or lurch. Lips, blinks and gaze keep working, because they carry meaning.
+- **Reduce Motion:** The fog holds still and the tilt and bob stop, with no ripples, waves, breath or lurch. The jaw, blinks and gaze keep working, because they carry meaning.
 
-**The Real Voice Rule.** Lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.
+**The Real Photograph Rule.** The head is the photograph at `Resources/persona.jpg`, with its provenance in `THIRD_PARTY_NOTICES.md`. Never replace it with a drawn or generated face, and any other portrait needs the same public-domain record.
+
+**The Found Features Rule.** What the camera saw stays the camera's: skin, lips, lids, irises and hair are warped or tinted, never drawn. Paint only what it never saw: the inside of the mouth, the cloud and blood over the eyes, and the cold point in each pupil.
+
+**The Real Voice Rule.** The jaw, lips and ripples come from the sound actually happening, never from a canned loop or the text. With no audio, the mouth rests and the fog stays quiet.
 
 **The One Wave Rule.** A phase change sends one dark wave from the mouth at 1400pt a second, with the new dark inside and the old outside and a soft 52pt edge. A change of ground strikes at full strength, entering hearing or speaking at 0.6, and cutting in at 2.4 with no change of colour. A new wave replaces the last.
 
@@ -326,7 +343,7 @@ The type field replaces the action row: Didot 22pt cold white on a firm puff tha
 The conversation, rolling up as a bank of Void over the lower window (0.55 second spring, slight bounce), with a soft top edge. It holds the status word, a Hide wisp, a scrolling transcript and the same dock. There are no bubbles. Your lines are cold white on the right, with words still being heard at 80%. Replies are long bone on the left, and cut-off replies drop to 82% (9:1) with a "You cut in here" scissors note. Tool and screen notes use small print with a symbol. New rows fade up 12pt in 0.25 seconds, and the transcript fades out over its top 5%.
 
 ### Floating Face
-The head alone on a transparent, always-on-top panel with no window shadow, sharing the main window's engine, so it says the same things. Its edges dissolve into the desktop rather than into a dark. Click starts or stops, dragging moves it, and right-click opens a menu. Light text can't sit on an unknown desktop, so the caption and the 2-line snippet of the last 90 characters sit on firm mist with a darkened mist layer behind.
+The head alone on a transparent, always-on-top panel with no window shadow, sharing the main window's engine, so it says the same things. Its edges dissolve into the desktop, carrying the photograph's dark surround with them, so on a light desktop the head sits in a ragged patch of black. Click starts or stops, dragging moves it, and right-click opens a menu. Light text can't sit on an unknown desktop, so the caption and the 2-line snippet of the last 90 characters sit on firm mist with a darkened mist layer behind.
 
 ### Settings
 Native macOS, in the style of System Settings: a sidebar of panes and grouped forms on the system window background, following the system appearance.
@@ -337,15 +354,18 @@ Native macOS, in the style of System Settings: a sidebar of panes and grouped fo
 
 **The Native Settings Rule.** Settings is where the app stops performing. Add the cherry tint and the Didot header, and leave the rest to the system. The past-conversations popover and the menus stay native too.
 
+### App Icon
+A separate drawing from `scripts/make-icon.swift`, not the photograph: a pale head half lost in black fog on the macOS icon grid, lit hard from the upper left, with two bloodshot eyes above the veil and a dark seam for a mouth. The tile is 824 units with a 186 unit corner, a soft drop shadow and a faint cold rim at 13%, so it keeps its shape on a dark Dock. The 16 and 32pt slots use their own master with eyes 1.5 times the size, because the full drawing's sockets and veins average to mud at that size.
+
 ### Motion
 Slow easing and small distances throughout the interface. Words change with a fade and a 12pt rise over 0.25 seconds, status words crossfade over 0.2 seconds, and the action row over 0.18 seconds. Everything on the head comes from the engine rather than added animation.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** drive lips and ripples from the sound actually happening, in the owner's ink.
+- **Do** drive the jaw, lips and ripples from the sound actually happening, in the owner's ink.
 - **Do** change state by changing the whole dark or the face, and pair it with its status word.
-- **Do** keep the head real, askew and lit from one side, dissolving at its edges.
+- **Do** keep the head the real photograph, graded and warped rather than redrawn, with its far side falling away and its edges dissolving.
 - **Do** set stage text straight on the dark, with the fog calmed behind it.
 - **Do** make a new stage control a word in a wisp of mist.
 - **Do** use the system face for the whole string when text contains any non-Latin script.
@@ -357,8 +377,8 @@ Slow easing and small distances throughout the interface. Words change with a fa
 - **Don't** make it cute or cartoonish: the owner rejected the cloud as childish.
 - **Don't** put cards, pills, glass or hard-edged containers on the stage.
 - **Don't** add shadows to text or controls.
-- **Don't** use cherry on the stage, or set interface elements in the flesh reds.
+- **Don't** use cherry on the stage, or set interface elements in the mouth or eye reds.
 - **Don't** set roman Didot below 21pt.
-- **Don't** add a second key light, or a second concurrent wave.
-- **Don't** make the head or the fog move fast: besides the voice-driven lips and blinks, only the lurch and the wave are quick.
+- **Don't** relight the photograph, draw over its features, or add a second concurrent wave.
+- **Don't** make the head or the fog move fast: besides the voice-driven jaw and blinks, only the lurch and the wave are quick.
 - **Don't** add a button to start talking.

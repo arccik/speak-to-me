@@ -18,7 +18,7 @@
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/ready.png" alt="The main window: a pale face in black fog, ready to listen"></td>
+    <td><img src="docs/screenshots/ready.png" alt="The main window: an old man's face in black fog, ready to listen"></td>
     <td><img src="docs/screenshots/speaking.png" alt="The face speaking a reply, with the words shown below it"></td>
     <td><img src="docs/screenshots/conversation.png" alt="The conversation sleeve, with an interrupted reply and a web search"></td>
   </tr>
@@ -33,7 +33,7 @@ Speak to Me is a native macOS app that turns any chat model served by [oMLX](htt
 
 - **Natural conversation.** Talk over a reply to interrupt it, without headphones. Replies start while the model is still writing.
 - **Works from any app.** Press <kbd>⌥</kbd><kbd>Space</kbd> to talk, with a floating face and a menu bar icon.
-- **A face that talks back.** A wasted face hangs in black fog, its lips and teeth following the voice you hear and its eyes following your pointer. Voices ripple through the fog, and talking over it makes it lurch at you.
+- **A face that talks back.** A real 1867 photograph comes alive in black fog: its jaw, lips and rotten teeth follow the voice you hear and its clouded eyes follow your pointer. Voices ripple through the fog, and talking over it makes it lurch at you.
 - **Answers in your language.** The language you speak is detected, and you choose the speech model for English, Russian and other languages.
 - **Voice cloning.** Record a few seconds or pick an audio file, and hear replies in that voice in English or Russian.
 - **Useful tools.** Web search, reading pages, the current time, and opening apps and web pages.

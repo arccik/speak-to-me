@@ -1,226 +1,238 @@
-// Draws the Speak to Me app icon — a live-cut record — and
-// writes a 1024 px PNG. Usage: swift scripts/make-icon.swift <out.png> [record|orb|bubble|smile]
+// Draws the Speak to Me app icon — a pale head half lost in black fog, with two bloodshot eyes —
+// and writes a 1024 px PNG. Usage: swift -O scripts/make-icon.swift <out.png> [small]
+// Colours come from DESIGN.md. "small" is the master for the 16 and 32 pt slots: bigger, cleaner eyes,
+// because the full drawing's sockets and veins average to mud at that size.
 import AppKit
-import CoreImage
 
-let args = CommandLine.arguments
-let output = URL(fileURLWithPath: args.count > 1 ? args[1] : "AppIcon-1024.png")
-let variant = args.count > 2 ? args[2] : "record"
+let output = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon-1024.png")
+
+let small = CommandLine.arguments.count > 2 && CommandLine.arguments[2] == "small"
+let eyeScale = small ? 1.5 : 1.0
 
 let size = 1024
 let space = CGColorSpaceCreateDeviceRGB()
-let ci = CIContext()
 
-func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> CGColor {
+struct RGB {
+    var r, g, b: Double
+    init(_ hex: UInt32) {
+        // sRGB bytes, mixed as stored, the same way the stage's shader treats its colours.
+        r = Double((hex >> 16) & 0xFF) / 255; g = Double((hex >> 8) & 0xFF) / 255; b = Double(hex & 0xFF) / 255
+    }
+    init(r: Double, g: Double, b: Double) { self.r = r; self.g = g; self.b = b }
+    static func * (c: RGB, k: Double) -> RGB { RGB(r: c.r * k, g: c.g * k, b: c.b * k) }
+    func mixed(_ other: RGB, _ t: Double) -> RGB {
+        RGB(r: r + (other.r - r) * t, g: g + (other.g - g) * t, b: b + (other.b - b) * t)
+    }
+}
+
+let void = RGB(0x07080C), fogGrey = RGB(0x8C96A8)
+let fleshLit = RGB(0xA89E8C), fleshBruised = RGB(0x78696B), pale = RGB(0xE2DCC6)
+let vein = RGB(0x751412), rawRim = RGB(0xB3241F), bloodWhite = RGB(0x54120F), eyeWhite = RGB(0xDDD3BC)
+let milkIris = RGB(0xB3BDB8), irisEdge = RGB(0x2A2E30), pupil = RGB(0x040406), gum = RGB(0x330A0D)
+
+func saturate(_ x: Double) -> Double { min(1, max(0, x)) }
+func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
+    let t = saturate((x - a) / (b - a))
+    return t * t * (3 - 2 * t)
+}
+func hash(_ i: Int, _ j: Int) -> Double {
+    let s = sin(Double(i) * 127.1 + Double(j) * 311.7) * 43758.5453
+    return s - floor(s)
+}
+func noise(_ x: Double, _ y: Double) -> Double {
+    let i = Int(floor(x)), j = Int(floor(y))
+    let fx = x - floor(x), fy = y - floor(y)
+    let u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy)
+    let top = hash(i, j) + (hash(i + 1, j) - hash(i, j)) * u
+    let bottom = hash(i, j + 1) + (hash(i + 1, j + 1) - hash(i, j + 1)) * u
+    return top + (bottom - top) * v
+}
+func fbm(_ x: Double, _ y: Double, octaves: Int = 5) -> Double {
+    var total = 0.0, weight = 0.5, norm = 0.0, px = x, py = y
+    for _ in 0..<octaves {
+        total += noise(px, py) * weight
+        norm += weight
+        weight *= 0.5
+        px = px * 2.03 + 17.3
+        py = py * 2.03 + 9.1
+    }
+    return total / norm
+}
+func bump(_ x: Double, _ y: Double, _ cx: Double, _ cy: Double, _ sx: Double, _ sy: Double) -> Double {
+    let dx = (x - cx) / sx, dy = (y - cy) / sy
+    return exp(-(dx * dx + dy * dy))
+}
+
+// Face coordinates: 1 unit is half the tile, x runs right and y runs down, tipped a few degrees so it hangs askew.
+let tilt = 0.075, eyeX = 0.31, eyeY = -0.12
+func faceSpace(_ px: Double, _ py: Double) -> (x: Double, y: Double) {
+    let u = (px - 512) / 412, v = (py - 512) / 412
+    return (u * cos(tilt) - v * sin(tilt), u * sin(tilt) + v * cos(tilt))
+}
+/// How far inside the skull's outline a point is: 1 at the centre, 0 at the edge.
+func skull(_ x: Double, _ y: Double) -> Double {
+    let width = 0.72 * (1 - 0.34 * smoothstep(0.05, 0.9, y))
+    return 1 - (x / width) * (x / width) - (y / 1.0) * (y / 1.0)
+}
+func height(_ x: Double, _ y: Double) -> Double {
+    var h = sqrt(max(0, skull(x, y))) * 0.62
+    for side in [-1.0, 1.0] {
+        h += bump(x, y, side * eyeX, -0.30, 0.25, 0.055) * 0.075              // brow ridge
+        h -= bump(x, y, side * eyeX, eyeY, 0.23, 0.13) * 0.24                 // socket
+        h += bump(x, y, side * 0.45, 0.14, 0.13, 0.075) * 0.07                // cheekbone
+        h -= bump(x, y, side * 0.34, 0.38, 0.13, 0.15) * 0.21                 // wasted cheek
+        h -= bump(x, y, side * 0.058, 0.275, 0.024, 0.016) * 0.07             // nostril
+        h -= bump(x, y, side * 0.56, -0.42, 0.14, 0.2) * 0.05                 // temple
+    }
+    h += bump(x, y, 0, -0.02, 0.055, 0.25) * 0.2                              // nose bridge
+    h += bump(x, y, 0, 0.215, 0.08, 0.055) * 0.09                             // nose tip
+    h -= bump(x, y, 0, 0.52, 0.23, 0.014) * 0.09                              // mouth seam
+    h += bump(x, y, 0, 0.74, 0.15, 0.08) * 0.06                               // chin
+    h += (fbm(x * 5 + 40, y * 5 + 12, octaves: 3) - 0.5) * 0.014                          // skin
+    return h
+}
+
+/// One eye, deep in its socket: wet, bloodshot, with a milky iris and a pinprick pupil. Nil outside the lids.
+func eye(_ x: Double, _ y: Double, side: Double) -> (color: RGB, coverage: Double, rim: Double) {
+    let ex = (x - side * eyeX) / eyeScale, ey = (y - eyeY) / eyeScale
+    let a = 0.18, across = saturate(abs(ex) / a)
+    let curve = 1 - across * across
+    // Heavy upper lid: flat across the top and cutting into the iris. The outer corners droop.
+    let droop = abs(ex) * abs(ex) * 0.5
+    let top = -0.066 * sqrt(curve) + 0.008 + droop, bottom = 0.06 * curve + 0.008 + droop
+    let inside = min(smoothstep(top - 0.004, top + 0.004, ey), 1 - smoothstep(bottom - 0.004, bottom + 0.004, ey))
+    let lidDistance = min(abs(ey - top), abs(ey - bottom))
+    // Raw along the lower lid only, fading out before the corners.
+    let rim = (1 - smoothstep(0.002, 0.03, lidDistance)) * smoothstep(top, top + 0.05, ey) * (1 - smoothstep(0.72, 1, abs(ex) / a))
+
+    // Whites turn to blood towards the corners, threaded with veins running in to the iris.
+    let n = noise(ex * 13 + side * 31, ey * 62 + 5)
+    let thread = 1 - smoothstep(0, 0.085, abs(n - 0.5))
+    var color = eyeWhite.mixed(bloodWhite, saturate(across * across * (small ? 0.55 : 0.95) + 0.1))
+    color = color.mixed(vein, thread * (0.45 + across * 0.55))
+
+    let r = sqrt(ex * ex + ey * ey)
+    let iris = 1 - smoothstep(0.058, 0.064, r)
+    let limbal = smoothstep(0.046, 0.062, r)
+    let streak = fbm(atan2(ey, ex) * 3 + side, r * 30, octaves: 2)
+    color = color.mixed(milkIris.mixed(irisEdge, limbal * 0.6) * (0.82 + streak * 0.36), iris)
+    color = color.mixed(pupil, 1 - smoothstep(0.015, 0.021, r))
+
+    // Heavy lid shade across the top, then one wet catchlight on the side the light comes from.
+    color = color * ((small ? 0.8 : 0.5) + (small ? 0.2 : 0.5) * smoothstep(top, top + 0.05, ey))
+    let catchlight = bump(ex, ey, -0.024, -0.024, 0.011, 0.009)
+    color = color.mixed(RGB(0xFFFFFF), catchlight * 0.9)
+    return (color, inside, rim)
+}
+
+// MARK: Render (every pixel of the tile; height is cached so the normals can read neighbours)
+
+let inset = 100, extent = 824
+var heights = [Double](repeating: 0, count: (extent + 2) * (extent + 2))
+for j in 0..<(extent + 2) {
+    for i in 0..<(extent + 2) {
+        let p = faceSpace(Double(inset + i) - 0.5, Double(inset + j) - 0.5)
+        heights[j * (extent + 2) + i] = height(p.x, p.y)
+    }
+}
+
+var pixels = [UInt8](repeating: 0, count: extent * extent * 4)
+let step = 1.0 / 412
+let lightLength = sqrt(0.78 * 0.78 + 0.34 * 0.34 + 0.52 * 0.52)
+let light = (x: -0.78 / lightLength, y: -0.34 / lightLength, z: 0.52 / lightLength)
+
+for j in 0..<extent {
+    for i in 0..<extent {
+        let px = Double(inset + i) + 0.5, py = Double(inset + j) + 0.5
+        let (x, y) = faceSpace(px, py)
+        let row = (j + 1) * (extent + 2) + i + 1
+        let dx = (heights[row + 1] - heights[row - 1]) / (2 * step)
+        let dy = (heights[row + extent + 2] - heights[row - extent - 2]) / (2 * step)
+        let nl = sqrt(dx * dx + dy * dy + 1)
+
+        // One hard side light: the nose throws the far half of the face into the dark, along a ragged edge.
+        let diffuse = saturate((-dx * light.x - dy * light.y + light.z) / nl)
+        let forehead = smoothstep(-0.26, -0.72, y), jaw = smoothstep(0.3, 0.8, y)
+        let terminator = 0.012 + forehead * 0.13 + jaw * 0.08 + (fbm(y * 4 + 3, x * 3 + 8, octaves: 3) - 0.5) * (0.04 + (forehead + jaw) * 0.14)
+        let softness = 0.018 + (forehead + jaw) * 0.05
+        let lit = 1 - smoothstep(terminator - softness, terminator + softness, x)
+        let sockets = bump(x, y, -eyeX, eyeY, 0.235, 0.135) + bump(x, y, eyeX, eyeY, 0.235, 0.135)
+        let hollow = 1 - smoothstep(0.12, 0.72, sockets) * 0.95
+        let blotch = fbm(x * 3.1 + 11, y * 3.1 + 2)
+        var skin = fleshBruised.mixed(fleshLit, smoothstep(0.3, 0.62, blotch))
+        skin = skin.mixed(pale, smoothstep(0.42, 0.98, diffuse) * 0.72)
+        skin = skin * (0.72 + 0.42 * smoothstep(0.3, 0.68, fbm(x * 5.5 + 3, y * 5.5 + 29, octaves: 4)))
+        let keyed = pow(diffuse, 1.35) * 1.3 * lit
+        let amount = (keyed + 0.03 + 0.1 / nl * (1 - lit)) * hollow
+        var color = skin * amount
+        // The mouth is a seam of dark gum, all but swallowed by the veil.
+        let seam = bump(x, y, 0, 0.52, 0.21, 0.016)
+        color = color.mixed(gum * 0.5, saturate(seam * 1.15))
+
+        // The head dissolves into the room at its edges, faster towards the jaw.
+        let ragged = (fbm(x * 3 + 21, y * 3 + 40) - 0.5) * 0.85
+        let edge = skull(x, y) + ragged - smoothstep(0.42, 1.0, y) * 0.42
+        let solid = smoothstep(0.02, 0.42, edge)
+
+        // The room: void, with a faint haze thickening towards the bottom.
+        let haze = fbm(px / 210 + 5, py / 210 + 1)
+        let room = void.mixed(fogGrey, smoothstep(0.38, 0.8, haze) * (0.05 + 0.13 * smoothstep(300, 924, py)))
+        var pixel = room.mixed(color, solid)
+
+        // A veil of fog drifting across the face, heaviest low down, kept clear of the eyes.
+        let veilNoise = smoothstep(0.46, 0.76, fbm(x * 2.4 + 70, y * 3.2 + 33))
+        let clearOfEyes = 1 - saturate(sockets * 1.3)
+        let veil = veilNoise * (0.1 + 0.3 * smoothstep(0.1, 0.8, y)) * clearOfEyes
+        pixel = pixel.mixed(fogGrey * 0.62, veil)
+
+        // The eyes sit above the fog, so they are the first and last thing to read.
+        for side in [-1.0, 1.0] where abs(x - side * eyeX) < 0.24 * eyeScale && abs(y - eyeY) < 0.16 * eyeScale {
+            let e = eye(x, y, side: side)
+            let strength = side < 0 || small ? 1.0 : 0.82
+            pixel = pixel.mixed(rawRim * strength, e.rim * 0.8)
+            pixel = pixel.mixed(e.color * strength, e.coverage)
+        }
+
+        let offset = (j * extent + i) * 4
+        let grain = (hash(i, j) - 0.5) * 0.006
+        pixels[offset] = UInt8(saturate(pixel.r + grain) * 255 + 0.5)
+        pixels[offset + 1] = UInt8(saturate(pixel.g + grain) * 255 + 0.5)
+        pixels[offset + 2] = UInt8(saturate(pixel.b + grain) * 255 + 0.5)
+        pixels[offset + 3] = 255
+    }
+}
+
+let face = CGImage(width: extent, height: extent, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: extent * 4, space: space,
+                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                   provider: CGDataProvider(data: Data(pixels) as CFData)!, decode: nil, shouldInterpolate: false,
+                   intent: .defaultIntent)!
+
+// MARK: Tile (macOS icon grid: 824 units with a 186 unit corner, and a soft drop shadow)
+
+func cg(_ hex: UInt32, _ a: CGFloat) -> CGColor {
     CGColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255, alpha: a)
 }
-
-// The record: cherry vinyl with one hot groove of white and yellow waves, a cobalt label.
-if variant == "record" {
-    let c = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
-    let center = CGPoint(x: 512, y: 512)
-    let tilePath = CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil)
-    c.saveGState()
-    c.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: rgb(0x000000, 0.35))
-    c.addPath(tilePath)
-    c.setFillColor(rgb(0xE5102B))
-    c.fillPath()
-    c.restoreGState()
-    c.addPath(tilePath)
-    c.clip()
-    c.setStrokeColor(rgb(0x8A0A1C, 0.75))
-    c.setLineWidth(3)
-    for r in stride(from: CGFloat(250), to: 620, by: 24) {
-        c.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
-    }
-    func wave(radius: CGFloat, amplitude: CGFloat, cycles: CGFloat, shift: CGFloat) -> CGPath {
-        let path = CGMutablePath()
-        for i in 0...720 {
-            let t = CGFloat(i) / 720 * 2 * .pi
-            let r = radius + amplitude * (sin(t * cycles + shift) * 0.7 + sin(t * (cycles + 5) + shift * 2) * 0.3)
-            let p = CGPoint(x: center.x + cos(t) * r, y: center.y + sin(t) * r)
-            i == 0 ? path.move(to: p) : path.addLine(to: p)
-        }
-        path.closeSubpath()
-        return path
-    }
-    c.setLineWidth(11)
-    c.setLineJoin(.round)
-    c.setStrokeColor(rgb(0xF4FF3A))
-    c.addPath(wave(radius: 345, amplitude: 34, cycles: 11, shift: 0.7))
-    c.strokePath()
-    c.setStrokeColor(rgb(0xFFFFFF))
-    c.addPath(wave(radius: 262, amplitude: 28, cycles: 9, shift: 2.1))
-    c.strokePath()
-    c.setFillColor(rgb(0x1420FF))
-    c.fillEllipse(in: CGRect(x: center.x - 190, y: center.y - 190, width: 380, height: 380))
-    c.setFillColor(rgb(0xF4FF3A))
-    c.fillEllipse(in: CGRect(x: center.x - 38, y: center.y - 38, width: 76, height: 76))
-    let rep = NSBitmapImageRep(cgImage: c.makeImage()!)
-    try! rep.representation(using: .png, properties: [:])!.write(to: output)
-    print("wrote \(output.path)")
-    exit(0)
-}
-
-/// Draws into a transparent full-size layer (origin top-left), optionally blurred.
-func layer(blur: CGFloat = 0, _ draw: (CGContext) -> Void) -> CGImage {
-    let c = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    c.translateBy(x: 0, y: CGFloat(size))
-    c.scaleBy(x: 1, y: -1)
-    draw(c)
-    let image = c.makeImage()!
-    guard blur > 0 else { return image }
-    let blurred = CIImage(cgImage: image).clampedToExtent().applyingGaussianBlur(sigma: Double(blur))
-        .cropped(to: CGRect(x: 0, y: 0, width: size, height: size))
-    return ci.createCGImage(blurred, from: CGRect(x: 0, y: 0, width: size, height: size))!
-}
-
-/// The orb's soft, organic edge: a circle modulated by a few fixed harmonics.
-func blob(center: CGPoint, radius: CGFloat, wobble: CGFloat, seed: CGFloat) -> CGPath {
-    let path = CGMutablePath()
-    for i in 0...180 {
-        let t = CGFloat(i) / 180 * 2 * .pi
-        let offset = sin(2 * t + seed) * 0.55 + sin(3 * t - seed * 1.7) * 0.4 + sin(5 * t + seed * 2.3) * 0.2
-        let r = radius * (1 + wobble * offset)
-        let point = CGPoint(x: center.x + cos(t) * r, y: center.y + sin(t) * r)
-        i == 0 ? path.move(to: point) : path.addLine(to: point)
-    }
-    path.closeSubpath()
-    return path
-}
-
-func fillRadial(_ c: CGContext, _ path: CGPath, colors: [CGColor], locations: [CGFloat], center: CGPoint, radius: CGFloat) {
-    c.saveGState()
-    c.addPath(path)
-    c.clip()
-    let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: locations)!
-    c.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius,
-                         options: [.drawsAfterEndLocation])
-    c.restoreGState()
-}
-
-// MARK: Tile (macOS icon grid: 824 pt rounded square with a soft drop shadow)
-
-let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
-let tilePath = CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil)
-
-let shadow = layer(blur: 18) { c in
-    c.addPath(CGPath(roundedRect: tile.offsetBy(dx: 0, dy: 12), cornerWidth: 186, cornerHeight: 186, transform: nil))
-    c.setFillColor(rgb(0x000000, 0.45))
-    c.fillPath()
-}
-let background = layer { c in
-    c.addPath(tilePath)
-    c.clip()
-    let night = CGGradient(colorsSpace: space, colors: [rgb(0x1B2050), rgb(0x0B0C1C)] as CFArray, locations: [0, 1])!
-    c.drawLinearGradient(night, start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 924), options: [])
-    // A faint inner rim of light along the top edge.
-    c.addPath(tilePath)
-    c.setStrokeColor(rgb(0xFFFFFF, 0.08))
-    c.setLineWidth(4)
-    c.strokePath()
-}
-
-// MARK: The orb
-
-let center = CGPoint(x: 512, y: variant == "bubble" ? 478 : 492)
-let radius: CGFloat = 238
-let haze = layer(blur: 60) { c in
-    fillRadial(c, blob(center: center, radius: radius * 1.35, wobble: 0.05, seed: 4),
-               colors: [rgb(0x3C7BF0, 0.75), rgb(0x5A3FD8, 0.45), rgb(0x5A3FD8, 0)], locations: [0, 0.6, 1],
-               center: center, radius: radius * 1.4)
-}
-let body = layer(blur: 16) { c in
-    let light = CGPoint(x: center.x - 50, y: center.y - 62)
-    let shape = CGMutablePath()
-    shape.addPath(blob(center: center, radius: radius, wobble: 0.07, seed: 1))
-    if variant == "bubble" {
-        // A speech-bubble tail growing out of the lower left of the orb.
-        shape.move(to: CGPoint(x: center.x - 150, y: center.y + 150))
-        shape.addQuadCurve(to: CGPoint(x: center.x - 245, y: center.y + 300), control: CGPoint(x: center.x - 170, y: center.y + 260))
-        shape.addQuadCurve(to: CGPoint(x: center.x - 30, y: center.y + 220), control: CGPoint(x: center.x - 120, y: center.y + 280))
-        shape.closeSubpath()
-    }
-    fillRadial(c, shape,
-               colors: [rgb(0xBFF4FF), rgb(0x34C2EA), rgb(0x3E7BEF), rgb(0x5B3FD8)], locations: [0, 0.3, 0.66, 1],
-               center: light, radius: radius * 1.5)
-}
-let layered = layer(blur: 26) { c in
-    c.setBlendMode(.plusLighter)
-    fillRadial(c, blob(center: center, radius: radius * 0.92, wobble: 0.1, seed: 4),
-               colors: [rgb(0xCFF6FF, 0.5), rgb(0x46C8F0, 0.35), rgb(0x46C8F0, 0)], locations: [0, 0.5, 1],
-               center: CGPoint(x: center.x - 30, y: center.y - 40), radius: radius)
-}
-let core = layer(blur: 60) { c in
-    c.setBlendMode(.plusLighter)
-    let p = CGPoint(x: center.x - 34, y: center.y - 48)
-    fillRadial(c, blob(center: p, radius: radius * 0.52, wobble: 0.06, seed: 7),
-               colors: [rgb(0xFFFFFF, 0.55), rgb(0xBDF3FF, 0.3), rgb(0xBDF3FF, 0)], locations: [0, 0.45, 1],
-               center: p, radius: radius * 0.58)
-}
-
-// MARK: Glow strands (the app's voice waves)
-
-func strand(amplitude: CGFloat, frequency: CGFloat, phase: CGFloat, y: CGFloat, smile: Bool) -> CGPath {
-    let path = CGMutablePath()
-    let x0: CGFloat = 230, x1: CGFloat = 794
-    for i in 0...160 {
-        let u = CGFloat(i) / 160
-        let x = x0 + (x1 - x0) * u
-        let taper = sin(u * .pi)
-        var dy = sin(u * frequency * 2 * .pi + phase) * amplitude * taper
-        if smile { dy += -cos(u * .pi) * 0 + sin(u * .pi) * 70 } // bow downward into a smile
-        let point = CGPoint(x: x, y: y + dy)
-        i == 0 ? path.move(to: point) : path.addLine(to: point)
-    }
-    return path
-}
-
-let strandsY: CGFloat = variant == "smile" ? 560 : 742
-let strands = [
-    strand(amplitude: variant == "smile" ? 18 : 46, frequency: 1.6, phase: 0.4, y: strandsY, smile: variant == "smile"),
-    strand(amplitude: variant == "smile" ? 12 : 30, frequency: 2.1, phase: 2.2, y: strandsY, smile: variant == "smile"),
-    strand(amplitude: variant == "smile" ? 8 : 20, frequency: 2.7, phase: 4.1, y: strandsY, smile: variant == "smile"),
-]
-func strokeStrands(_ c: CGContext, width: CGFloat, alpha: CGFloat) {
-    for (i, path) in strands.enumerated() {
-        c.saveGState()
-        c.addPath(path.copy(strokingWithWidth: width * [1, 0.75, 0.6][i], lineCap: .round, lineJoin: .round, miterLimit: 4))
-        c.clip()
-        let g = CGGradient(colorsSpace: space,
-                           colors: [rgb(0x46C8F0, 0), rgb(0x7FE3FF, alpha), rgb(0xB794FF, alpha), rgb(0x8E62F7, 0)] as CFArray,
-                           locations: [0, 0.3, 0.7, 1])!
-        c.drawLinearGradient(g, start: CGPoint(x: 230, y: 0), end: CGPoint(x: 794, y: 0), options: [])
-        c.restoreGState()
-    }
-}
-let strandGlow = layer(blur: 10) { c in strokeStrands(c, width: 16, alpha: 0.8) }
-let strandLines = layer { c in strokeStrands(c, width: 7, alpha: 1) }
-
-// MARK: Composite
-
 let canvas = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-let full = CGRect(x: 0, y: 0, width: size, height: size)
-canvas.draw(shadow, in: full)
-canvas.draw(background, in: full)
+let tile = CGRect(x: inset, y: inset, width: extent, height: extent)
+let tilePath = CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil)
 canvas.saveGState()
-canvas.addPath(CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil))
-canvas.clip()
-canvas.draw(haze, in: full)
-canvas.draw(body, in: full)
-canvas.setBlendMode(.plusLighter)
-canvas.draw(layered, in: full)
-canvas.draw(core, in: full)
-if variant != "bubble" {
-    canvas.draw(strandGlow, in: full)
-    canvas.draw(strandLines, in: full)
-}
+canvas.setShadow(offset: CGSize(width: 0, height: -14), blur: 28, color: cg(0x000000, 0.35))
+canvas.addPath(tilePath)
+canvas.setFillColor(cg(0x07080C, 1))
+canvas.fillPath()
 canvas.restoreGState()
+canvas.saveGState()
+canvas.addPath(tilePath)
+canvas.clip()
+canvas.draw(face, in: tile)
+canvas.restoreGState()
+// A faint cold rim, so the near-black tile keeps its shape on a dark Dock.
+canvas.addPath(CGPath(roundedRect: tile.insetBy(dx: 2, dy: 2), cornerWidth: 184, cornerHeight: 184, transform: nil))
+canvas.setStrokeColor(cg(0xE9ECF1, 0.13))
+canvas.setLineWidth(4)
+canvas.strokePath()
 
 let rep = NSBitmapImageRep(cgImage: canvas.makeImage()!)
 try! rep.representation(using: .png, properties: [:])!.write(to: output)

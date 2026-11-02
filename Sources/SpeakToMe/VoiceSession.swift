@@ -319,7 +319,7 @@ final class VoiceSession {
         Task {
             do {
                 try await speech.prepare(engine, using: setup) { fraction in
-                    Task { @MainActor [weak self] in
+                    Task { @MainActor [weak self = self] in
                         guard case .downloading = self?.engineStates[engine] else { return }
                         self?.engineStates[engine] = fraction < 1 ? .downloading(fraction) : .loading
                     }

@@ -389,11 +389,12 @@ extension SelfTest {
             if !ok { failures += 1 }
         }
         if let model {
-            let client = await OMLXClient.fromSettings()
+            let client = OMLXClient.fromSettings()
             let questions = ["What is the tallest mountain in Europe?",
                              "Tell me a very short spooky story, in a mysterious voice.",
                              "Расскажи очень короткую страшную историю загадочным голосом."]
-            for (name, prompt) in [("off", VoiceSession.defaultPrompt), ("on", VoiceSession.defaultPrompt + VoiceSession.expressivePrompt)] {
+            let prompts = await [("off", VoiceSession.defaultPrompt), ("on", VoiceSession.defaultPrompt + VoiceSession.expressivePrompt)]
+            for (name, prompt) in prompts {
                 for question in questions {
                     var reply = ""
                     do {
