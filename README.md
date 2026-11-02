@@ -18,8 +18,8 @@
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/ready.png" alt="The main window: a red record filling the window, ready to listen"></td>
-    <td><img src="docs/screenshots/speaking.png" alt="The record cutting yellow waves as it speaks a reply, with the words shown below it"></td>
+    <td><img src="docs/screenshots/ready.png" alt="The main window: a pale face in black fog, ready to listen"></td>
+    <td><img src="docs/screenshots/speaking.png" alt="The face speaking a reply, with the words shown below it"></td>
     <td><img src="docs/screenshots/conversation.png" alt="The conversation sleeve, with an interrupted reply and a web search"></td>
   </tr>
 </table>
@@ -32,8 +32,8 @@ Speak to Me is a native macOS app that turns any chat model served by [oMLX](htt
 ## Features
 
 - **Natural conversation.** Talk over a reply to interrupt it, without headphones. Replies start while the model is still writing.
-- **Works from any app.** Press <kbd>⌥</kbd><kbd>Space</kbd> to talk, with a floating record and a menu bar icon.
-- **Your conversation, cut into a record.** Your voice and the replies carve waves into a disc that fills the window. Drag the disc backwards to rewind through what was said.
+- **Works from any app.** Press <kbd>⌥</kbd><kbd>Space</kbd> to talk, with a floating face and a menu bar icon.
+- **A face that talks back.** A pale face hangs in black fog, its lips following the voice you hear and its eyes following your pointer. Voices ripple through the fog, and talking over it makes it lurch at you.
 - **Answers in your language.** The language you speak is detected, and you choose the speech model for English, Russian and other languages.
 - **Voice cloning.** Record a few seconds or pick an audio file, and hear replies in that voice in English or Russian.
 - **Useful tools.** Web search, reading pages, the current time, and opening apps and web pages.
@@ -99,7 +99,6 @@ To keep the microphone permission across rebuilds, sign in to Xcode with an Appl
 | Interrupt a reply | Just start talking |
 | Stop a reply | <kbd>Esc</kbd> |
 | Mute the mic | <kbd>M</kbd> |
-| Rewind through the conversation | Drag the disc anti-clockwise, and let go to spring back |
 | Show or hide the conversation | <kbd>C</kbd> |
 | New conversation | <kbd>⌘</kbd><kbd>N</kbd> |
 | Settings | <kbd>⌘</kbd><kbd>,</kbd> |

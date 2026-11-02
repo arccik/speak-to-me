@@ -34,7 +34,7 @@ A native window on a Mac desktop, usually kept open during a conversation. Space
 
 ## Brand Commitments
 
-The name is Speak to Me. The owner has said nothing in the current look is precious, including the orb and palette. The microphone button is explicitly rejected, and starting to talk is done by clicking anywhere in the window or pressing Space. Voice-reactive waves are what the owner enjoys most. The owner wants the app to catch attention and be fun to use.
+The name is Speak to Me. The owner wants an animated persona that talks with synced lips, in a serious, mysterious, dark and fairly creepy register; a cute cloud version was rejected as childish. Controls should feel like mist. The microphone button is explicitly rejected, and starting to talk is done by clicking anywhere in the window or pressing Space. Voice-reactive waves are what the owner enjoys most. The owner wants the app to catch attention and be entertaining to use.
 
 ## Evidence on Hand
 

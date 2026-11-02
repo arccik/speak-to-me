@@ -36,7 +36,7 @@ struct SpeakToMeApp: App {
             Shortcuts.shared.install(.talk) {
                 guard session.canToggle else { return }
                 session.toggle()
-                // Working in another app? Show the floating record so you can see it listening.
+                // Working in another app? Show the floating face so you can see it listening.
                 if UserDefaults.standard.object(forKey: "orbOnHotKey") as? Bool ?? true,
                    !NSApp.isActive || !AppActions.mainWindowVisible {
                     MiniOrbController.shared.show(session: session)
@@ -80,7 +80,7 @@ private struct MenuBarIcon: View {
     @Environment(VoiceSession.self) private var session
 
     var body: some View {
-        Image(systemName: session.isActive ? "record.circle.fill" : "record.circle")
+        Image(systemName: session.isActive ? "eye.fill" : "eye")
     }
 }
 
@@ -94,7 +94,7 @@ private struct MenuBarContent: View {
         if let talk = shortcuts.talk { Text("\(talk.display) toggles from any app") }
         Divider()
         Button("Show Window") { AppActions.showMainWindow() }
-        Button(MiniOrbController.shared.isVisible ? "Hide Floating Record" : "Show Floating Record") {
+        Button(MiniOrbController.shared.isVisible ? "Hide Floating Face" : "Show Floating Face") {
             MiniOrbController.shared.toggle(session: session)
         }
         Divider()

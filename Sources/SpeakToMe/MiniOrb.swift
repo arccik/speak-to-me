@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// A small always-on-top record you can keep in a corner of the screen while you work.
+/// A small always-on-top face you can keep in a corner of the screen while you work.
 /// Click it to start/stop, drag it anywhere, right-click for options.
 @MainActor
 final class MiniOrbController {
@@ -54,27 +54,27 @@ private struct MiniOrbView: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Record(phase: session.phase, muted: session.micMuted, levels: session.levels, layout: LatheLayout(style: .puck))
+            Persona(phase: session.phase, muted: session.micMuted, levels: session.levels, layout: FaceLayout(style: .puck))
                 .frame(width: 150, height: 150)
                 .contentShape(Circle())
                 .onTapGesture { if session.canToggle { session.toggle() } }
             Text(caption)
                 .font(.stamp(13))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 8)
                 .frame(height: 20)
-                .background(Mood.of(session.phase, muted: session.micMuted).vinyl.color(), in: Rectangle())
-                .padding(.top, 2)
+                .background(MistBackground(firm: true, seed: 1))
+                .padding(.top, 6)
             if let snippet {
                 Text(snippet)
                     .font(.display(11, weight: .semibold, for: snippet))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(Mood.of(session.phase, muted: session.micMuted).vinyl.color(), in: Rectangle())
-                    .padding(.top, 4)
+                    .background(MistBackground(firm: true, seed: 2, spill: CGSize(width: 8, height: 7)))
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
         }
@@ -84,9 +84,9 @@ private struct MiniOrbView: View {
                 .disabled(!session.canToggle)
             Button("Open Speak to Me") { AppActions.showMainWindow() }
             Divider()
-            Button("Hide Floating Record") { MiniOrbController.shared.hide() }
+            Button("Hide Floating Face") { MiniOrbController.shared.hide() }
         }
-        .modifier(RecordSync())
+        .modifier(PersonaSync())
         .help(shortcuts.talk.map { "Click to start or stop · \($0.display) from anywhere" } ?? "Click to start or stop")
     }
 

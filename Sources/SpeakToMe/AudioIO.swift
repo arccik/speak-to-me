@@ -200,9 +200,12 @@ final class AudioIO: @unchecked Sendable {
         }
 
         // Installed after start so it can't disturb the voice-processing format negotiation.
+        let bands = VoiceBands()
         engine.mainMixerNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
             guard let self, let data = buffer.floatChannelData?[0] else { return }
-            self.levels.speaker = AudioLevels.rms(UnsafeBufferPointer(start: data, count: Int(buffer.frameLength)))
+            let samples = UnsafeBufferPointer(start: data, count: Int(buffer.frameLength))
+            self.levels.speaker = AudioLevels.rms(samples)
+            self.levels.speakerBands = bands.analyze(samples, sampleRate: Float(buffer.format.sampleRate))
         }
     }
 
@@ -230,6 +233,7 @@ final class AudioIO: @unchecked Sendable {
             teardown()
             levels.mic = 0
             levels.speaker = 0
+            levels.speakerBands = .zero
         }
     }
 
@@ -421,6 +425,13 @@ final class AudioLevels: @unchecked Sendable {
     private let lock = NSLock()
     private var _mic: Float = 0
     private var _speaker: Float = 0
+    private var _speakerBands = SIMD3<Float>.zero
+
+    /// How strong the reply is below 900 Hz, up to 3 kHz, and above: what shapes the lips.
+    var speakerBands: SIMD3<Float> {
+        get { lock.lock(); defer { lock.unlock() }; return _speakerBands }
+        set { lock.lock(); _speakerBands = newValue; lock.unlock() }
+    }
 
     var mic: Float {
         get { lock.lock(); defer { lock.unlock() }; return _mic }
@@ -439,6 +450,27 @@ final class AudioLevels: @unchecked Sendable {
         for s in samples { sum += s * s }
         let db = 20 * log10(max(sqrt(sum / Float(samples.count)), 1e-6))
         return min(1, max(0, (db + 50) / 40))
+    }
+}
+
+/// Splits a voice into three bands with a pair of one-pole filters, cheap enough to run on
+/// every buffer. Only the audio tap calls it, so its filter state needs no lock.
+final class VoiceBands: @unchecked Sendable {
+    private var low: Float = 0
+    private var lowMid: Float = 0
+
+    func analyze(_ samples: UnsafeBufferPointer<Float>, sampleRate: Float) -> SIMD3<Float> {
+        guard !samples.isEmpty, sampleRate > 0 else { return .zero }
+        let lowStep = 1 - exp(-2 * .pi * 900 / sampleRate)
+        let midStep = 1 - exp(-2 * .pi * 3000 / sampleRate)
+        var energy = SIMD3<Float>.zero
+        for sample in samples {
+            low += (sample - low) * lowStep
+            lowMid += (sample - lowMid) * midStep
+            energy += SIMD3(low * low, (lowMid - low) * (lowMid - low), (sample - lowMid) * (sample - lowMid))
+        }
+        let mean = energy / Float(samples.count)
+        return SIMD3(mean.x.squareRoot(), mean.y.squareRoot(), mean.z.squareRoot())
     }
 }
 

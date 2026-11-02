@@ -2,18 +2,18 @@
 version: 1
 slug: "sources-speaktome-contentview-swift"
 primary_target: "Sources/SpeakToMe/ContentView.swift"
-related_targets: ["Sources/SpeakToMe/Visuals.swift","Sources/SpeakToMe/LatheEngine.swift","Sources/SpeakToMe/LatheRenderer.swift","Sources/SpeakToMe/MiniOrb.swift","Sources/SpeakToMe/SettingsView.swift"]
+related_targets: ["Sources/SpeakToMe/Visuals.swift","Sources/SpeakToMe/FaceEngine.swift","Sources/SpeakToMe/FaceRenderer.swift","Sources/SpeakToMe/MistControls.swift","Sources/SpeakToMe/MiniOrb.swift","Sources/SpeakToMe/SettingsView.swift"]
 ---
 
-Scope: the main window of Speak to Me, plus the floating record. Mode: Experience. Audience: Mac users having long spoken conversations with a local model at the desk. Task: talk, listen, interrupt. Constraints: every existing feature stays reachable, GPU stays cheap, pauses when idle or hidden.
+Scope: the main window of Speak to Me, plus the floating face. Mode: Experience. Audience: Mac users having long spoken conversations with a local model at the desk. Task: talk, listen, interrupt. Constraints: every existing feature stays reachable except drag-to-rewind (owner dropped it), GPU stays cheap, pauses when hidden or asleep. Build path: code-led, no image generation available. Owner rejected the cute cloud build as childish and pinned: serious, mysterious, dark, a fair bit creepy.
 
 ## Direction contract
 
-THESIS: The conversation is physically cut, live, into one giant record. It refuses the category's glowing blob and round mic button.
-OWN-WORLD: Full-strength cherry vinyl (#E5102B), white grooves for you, acid yellow (#F4FF3A) for the reply, cobalt label (#1420FF). Heavy system type, tight tracking, set directly on the vinyl with no cards, no pills, no glass. Thinking turns the vinyl cobalt.
-STORY: You see a record, click anywhere, a tonearm drops and your voice carves waves. It answers in yellow. Talk over it and a shock crosses the disc. Drag the disc to scratch back through what was said.
-FIRST VIEWPORT: Disc centred at 46% height, bleeding past every edge. Label about 104pt radius with text printed on it. Status 24pt top-left under the traffic lights. Words 34pt heavy, bottom-left, grooves hushed behind them. Text controls below.
-FORM: The Cutting Lathe, position 5 on the ordered list. seed:27d6cdece6b63ea9
-Signature interaction: click anywhere to drop the arm; drag to scratch through history. Motion grammar: everything is rotation, one wavefront per phase change, new grooves are hot and big, then cool and calm as they travel outward.
-Raises: from Torn Flyer Wall, depth is calendar. From Raku, only the groove being cut is hot. From Split-Flap, a change sweeps the whole surface at once. From Pastel Mascot, colour at full strength. From Paper Menagerie, one mechanism drives every moving part.
+THESIS: A pale face pressing through black fog, watching you, speaking. Its lips follow the actual voice; its mouth opens onto nothing. It refuses the category's glowing blob, round mic button and friendly avatar.
+OWN-WORLD: Near-black cold ground (#07080C), grey fog, bone-grey relief lit from one side, two cold points of light in hollow sockets. Oxblood dark (#2C060C) for thinking. Bone (#D8CFA8) for reply words, cold white for yours. Didot at display sizes, Avenir Next medium small. Controls are thin wisps of mist, no pills or glass.
+STORY: The eyes find your pointer. Click anywhere; your voice closes in as faint ripples. It sinks back under a red dark while thinking, then speaks, cold breath falling from its mouth. Talk over it and it lurches at you, eyes flaring. Left alone it fades away and drawing stops.
+FIRST VIEWPORT: Head centred and hanging, dissolving at its edges, with the top-left dark free for the status word in Didot italic. Words 34pt bottom-left. Wisps below. As words grow the head rises and shrinks.
+FORM: The Apparition, an owner-pinned steer of The Wind Head. seed:8f5472a16b62176f
+Signature interaction: lip sync from three live voice bands; slow eyes that follow the pointer everywhere. Motion grammar: almost still, slow drift; one dark wave leaves the mouth per phase change; only the lurch is fast.
+Raises: from Phosphor Terminal, light that lingers. From Cracktro, fog in planes with a still front. From Daylight Section, a single light direction.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

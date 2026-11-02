@@ -1,134 +1,119 @@
 import SwiftUI
 
 enum Theme {
-    static let vinyl = Mood.cherry.color()
-    static let cobalt = Mood.cobalt.color()
+    /// Settings' tint.
+    static let accent = Mood.cherry.color()
+    /// The ground behind the conversation.
+    static let abyss = Mood.void.color()
     static let acid = Mood.replyInk.color()
-    /// Long replies on the sleeve: the reply's yellow, calmed down enough to read for a while.
-    static let replyText = RGBA.hex(0xFBFFC2).color()
-    static let text = Color.white
-    static let hover = Color.white.opacity(0.18)
+    /// The colour of the wisps behind the controls.
+    static let mist = RGBA.hex(0xA9B2C2).color()
+    /// Words on a wisp of mist.
+    static let ink = Mood.youInk.color()
+    /// Long replies in the conversation.
+    static let replyText = RGBA.hex(0xD8D2BC).color()
+    static let text = Mood.youInk.color()
 }
 
 extension Font {
-    /// Sleeve lettering: heavy and geometric. Avenir Next is Latin only, so text in any other
-    /// script is set in the system face as a whole, rather than with Avenir's punctuation mixed in.
-    static func display(_ size: CGFloat, weight: Font.Weight = .heavy, for text: String = "") -> Font {
+    /// Large words are set in Didot, like an inscription; small ones stay plain. Didot and
+    /// Avenir Next are Latin only, so text in any other script is set in the system's matching
+    /// face as a whole, rather than with their punctuation mixed in.
+    static func display(_ size: CGFloat, weight: Font.Weight = .medium, for text: String = "") -> Font {
         let latin = text.unicodeScalars.allSatisfy { !$0.properties.isAlphabetic || $0.value < 0x250 }
-        return latin ? .custom("Avenir Next", size: size).weight(weight) : .system(size: size, weight: weight)
+        if size >= 21 {
+            return latin ? .custom("Didot", size: size) : .system(size: size, weight: .regular, design: .serif)
+        }
+        return latin ? .custom("Avenir Next", size: size).weight(.medium) : .system(size: size, weight: .medium)
     }
 
     static func stamp(_ size: CGFloat) -> Font {
-        .custom("Avenir Next Condensed", size: size).weight(.heavy)
+        .custom("Didot-Italic", size: size)
     }
 }
 
 struct ContentView: View {
     @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
-    @State private var scratching = false
-    @State private var scratchLine: UUID?
-    @State private var awake = false
-    @State private var lastAngle: Double?
     @State private var wordsHeight: CGFloat = 0
+    @State private var wake = 0
+    @State private var lastWake = Date.distantPast
+    @State private var resting = false
 
     private var showChat: Bool { chatOpen && !session.lines.isEmpty }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                record
-                    .ignoresSafeArea()
-                // The whole window is the control: click to talk, drag to scratch.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .pointerStyle(session.canToggle ? .link : .default)
-                    .onTapGesture { if session.canToggle { session.toggle() } }
-                    .gesture(scratch(in: geo.size))
-                    .accessibilityElement()
-                    .accessibilityLabel(session.isActive ? "Stop talking" : "Start talking")
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { if session.canToggle { session.toggle() } }
-                VStack(alignment: .leading, spacing: 0) {
-                    TopBar()
-                    if !showChat {
-                        StatusLine(scratching: scratching)
-                            .padding(.horizontal, 22)
-                            .padding(.top, 8)
-                    }
-                    Spacer(minLength: showChat ? LatheRenderer.sleeveTop - 30 : 0)
-                    if showChat {
-                        Sleeve()
-                            .transition(.move(edge: .bottom))
-                    } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Group {
-                                if session.lines.isEmpty && (session.liveText ?? "").isEmpty && !session.hasProblem {
-                                    EmptyWords()
-                                } else {
-                                    Words(scratchLine: scratchLine)
-                                }
-                            }
-                            .transition(.opacity)
-                            Dock()
-                        }
+        ZStack(alignment: .topLeading) {
+            persona
+                .ignoresSafeArea()
+            // The whole window is the control: click to talk.
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .pointerStyle(session.canToggle ? .link : .default)
+                .onTapGesture { if session.canToggle { session.toggle() } }
+                .accessibilityElement()
+                .accessibilityLabel(session.isActive ? "Stop talking" : "Start talking")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { if session.canToggle { session.toggle() } }
+            VStack(alignment: .leading, spacing: 0) {
+                TopBar()
+                if !showChat {
+                    StatusLine()
                         .padding(.horizontal, 22)
-                        .padding(.bottom, 16)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { wordsHeight = $0 }
+                        .padding(.top, 8)
+                }
+                Spacer(minLength: showChat ? FaceRenderer.sleeveTop - 30 : 0)
+                if showChat {
+                    Sleeve()
+                        .transition(.move(edge: .bottom))
+                } else {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Group {
+                            if session.lines.isEmpty && (session.liveText ?? "").isEmpty && !session.hasProblem {
+                                EmptyWords()
+                            } else {
+                                Words()
+                            }
+                        }
+                        .transition(.opacity)
+                        Dock()
                     }
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 16)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { wordsHeight = $0 }
                 }
-                .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
             }
-            .animation(.spring(duration: 0.55, bounce: 0.1), value: showChat)
+            .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
         }
-        .tint(.white)
+        .animation(.spring(duration: 0.55, bounce: 0.1), value: showChat)
+        .tint(Theme.ink)
         .preferredColorScheme(.dark)
+        .environment(\.mistDrifts, !resting)
+        .onContinuousHover { _ in
+            // Someone's here, so stay awake. Once a second is plenty.
+            FaceEngine.shared.poke()
+            if resting || Date().timeIntervalSince(lastWake) > 1 {
+                lastWake = Date()
+                wake += 1
+            }
+        }
         .onAppear(perform: SpaceKey.install)
-        .modifier(RecordSync())
+        .modifier(PersonaSync())
     }
 
-    private var record: some View {
-        Record(phase: session.phase, muted: session.micMuted, levels: session.levels,
-               layout: LatheLayout(style: .stage,
-                                   labelText: "SPEAK TO ME  \u{00B7}  \(session.modelID.isEmpty ? "SIDE A" : session.modelID)  \u{00B7}  ",
+    private var persona: some View {
+        Persona(phase: session.phase, muted: session.micMuted, levels: session.levels,
+                layout: FaceLayout(style: .stage,
                                    // A still has no second pass to measure in, so it uses a typical height.
-                                   hush: showChat ? 0 : Snapshots.isRendering ? 210 : wordsHeight + 10, peek: showChat),
-               awake: awake)
-    }
-
-    /// Round and round the disc, backwards through what was said. Let go and it springs back.
-    private func scratch(in size: CGSize) -> some Gesture {
-        let center = LatheRenderer.center(in: size, style: .stage, peek: showChat ? 1 : 0)
-        return DragGesture(minimumDistance: 6)
-            .onChanged { drag in
-                let angle = atan2(drag.location.y - center.y, drag.location.x - center.x)
-                if let lastAngle {
-                    var delta = angle - lastAngle
-                    if delta > .pi { delta -= 2 * .pi } else if delta < -.pi { delta += 2 * .pi }
-                    LatheEngine.shared.scratch(byTurns: -delta / (2 * .pi) * 6)
-                }
-                lastAngle = angle
-                LatheEngine.shared.isScrubbing = true
-                awake = true
-                scratching = true
-                scratchLine = LatheEngine.shared.lineAtHead
-            }
-            .onEnded { _ in
-                lastAngle = nil
-                LatheEngine.shared.isScrubbing = false
-                scratching = false
-                scratchLine = nil
-                Task {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    if !LatheEngine.shared.isScrubbing { awake = false }
-                }
-            }
+                                   hush: showChat ? 0 : Snapshots.isRendering ? 230 : wordsHeight + 14, peek: showChat),
+                wake: wake,
+                onRest: { resting = $0 })
     }
 }
 
-/// Keeps the record's grooves in step with the conversation.
-struct RecordSync: ViewModifier {
+/// Keeps the face in step with the conversation.
+struct PersonaSync: ViewModifier {
     @Environment(VoiceSession.self) private var session
 
     private var signature: String {
@@ -136,7 +121,7 @@ struct RecordSync: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.onChange(of: signature, initial: true) { LatheEngine.shared.sync(lines: session.lines) }
+        content.onChange(of: signature, initial: true) { FaceEngine.shared.sync(lines: session.lines) }
     }
 }
 
@@ -199,12 +184,13 @@ private struct TopIconLabel: View {
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(Theme.text)
+            .foregroundStyle(hovering ? Theme.ink : Theme.text)
             .frame(width: 28, height: 24)
-            .background(hovering ? Theme.hover : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .background(MistBackground(firm: true, opacity: hovering ? 1 : 0, seed: systemImage.count, spill: CGSize(width: 7, height: 8)))
             .opacity(enabled ? 1 : 0.5)
             .contentShape(Rectangle())
             .onHover { hovering = $0 && enabled }
+            .animation(.easeOut(duration: 0.18), value: hovering)
     }
 }
 
@@ -323,7 +309,6 @@ private struct ModelMenu: View {
 /// What's happening, in one word you can read from across the room.
 private struct StatusLine: View {
     @Environment(VoiceSession.self) private var session
-    let scratching: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -344,7 +329,6 @@ private struct StatusLine: View {
     }
 
     private var title: String {
-        if scratching { return "Rewinding" }
         if session.micMuted, session.phase == .listening { return "Mic muted" }
         switch session.phase {
         case .loading: return "Warming up"
@@ -358,7 +342,7 @@ private struct StatusLine: View {
     }
 }
 
-// MARK: - Words on the vinyl
+// MARK: - Words in the dark
 
 private struct EmptyWords: View {
     @Environment(VoiceSession.self) private var session
@@ -367,12 +351,11 @@ private struct EmptyWords: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(session.isActive ? "Go ahead, I'm listening." : "Click anywhere and start talking.")
                 .font(.display(34))
-                .tracking(-0.5)
-                .lineSpacing(-2)
+                .lineSpacing(1)
                 .foregroundStyle(Theme.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .allowsHitTesting(false)
-            HStack(spacing: 18) {
+            HStack(spacing: 24) {
                 ForEach(["Tell me a fun fact", "Plan my evening", "Explain black holes"], id: \.self) { prompt in
                     TextAction(text: prompt, help: "Ask this") { session.send(prompt) }
                         .disabled(!session.canToggle)
@@ -384,10 +367,9 @@ private struct EmptyWords: View {
 }
 
 /// With the sleeve closed, only what's being said right now: your words in white, the
-/// reply's in yellow, the same as their grooves. Long replies keep their newest words in view.
+/// reply's in bone, the same as their ripples. Long replies keep their newest words in view.
 private struct Words: View {
     @Environment(VoiceSession.self) private var session
-    let scratchLine: UUID?
 
     private struct Current: Equatable {
         var id: String
@@ -398,9 +380,6 @@ private struct Words: View {
     }
 
     private var current: Current? {
-        if let scratchLine, let line = session.lines.first(where: { $0.id == scratchLine }) {
-            return Current(id: "scratch-\(line.id)", role: line.role, text: line.text, live: false, interrupted: line.interrupted)
-        }
         switch session.phase {
         case .loading(let message): return Current(id: "loading", role: "system", text: message, live: true)
         case .failed(let message): return Current(id: "failed", role: "system", text: message, live: false)
@@ -437,14 +416,13 @@ private struct Words: View {
 
     @ViewBuilder
     private func words(_ current: Current) -> some View {
-        // Nothing written yet: the lifted arm and the blue disc say it's thinking.
+        // Nothing written yet: the dark turning red and the face sinking back say it's thinking.
         if !current.text.isEmpty {
             let shown = current.role == "system" ? Self.unbrokenLinks(current.text) : current.text
             let size: CGFloat = current.role == "system" ? 26 : current.text.count < 70 ? 34 : current.text.count < 150 ? 26 : 21
             Text(shown)
                 .font(.display(size, weight: size > 30 ? .heavy : .bold, for: shown))
-                .tracking(size > 30 ? -0.5 : -0.2)
-                .lineSpacing(size > 30 ? -2 : 1)
+                .lineSpacing(2)
                 .foregroundStyle(color(current))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxHeight: 190, alignment: .bottomLeading)
@@ -470,27 +448,31 @@ private struct Words: View {
     }
 }
 
-/// A word you can click: no box around it, just the word, underlined.
-private struct TextAction: View {
+/// A wisp of mist with a word in it. It drifts at rest, thickens under the pointer and
+/// scatters when clicked.
+struct TextAction: View {
     let text: String
     var systemImage: String?
     let help: String
     let action: () -> Void
     @State private var hovering = false
+    @State private var burst = 0
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            burst += 1
+            action()
+        } label: {
             HStack(spacing: 5) {
                 if let systemImage { Image(systemName: systemImage).font(.system(size: 11, weight: .heavy)) }
-                Text(text).underline(!hovering, color: Theme.text)
+                Text(text)
             }
-            .font(.display(13, weight: .bold))
-            .foregroundStyle(hovering ? Mood.cherry.color() : Theme.text)
+            .font(.display(13))
+            .foregroundStyle(Theme.ink)
             .padding(.horizontal, 6)
             .frame(height: 26)
-            .background(hovering ? Color.white : .clear, in: Rectangle())
-            .padding(.horizontal, -6)
+            .background(MistBackground(firm: hovering, burst: burst, seed: text.count))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -502,8 +484,7 @@ private struct TextAction: View {
 
 // MARK: - The sleeve
 
-/// The conversation slides up over the record like its sleeve, with the disc still
-/// turning above it.
+/// The conversation rolls in like a bank of fog, with the small face still talking above it.
 private struct Sleeve: View {
     @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
@@ -511,7 +492,7 @@ private struct Sleeve: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                StatusLine(scratching: false)
+                StatusLine()
                 Spacer()
                 TextAction(text: "Hide", help: "Hide the conversation (C)") { chatOpen = false }
             }
@@ -523,7 +504,13 @@ private struct Sleeve: View {
                 .padding(.top, 8)
                 .padding(.bottom, 16)
         }
-        .background(Theme.cobalt.ignoresSafeArea())
+        .background {
+            // Soft along the top, like the edge of a bank of fog.
+            Theme.abyss
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.03)],
+                                     startPoint: .top, endPoint: .bottom))
+                .ignoresSafeArea()
+        }
     }
 }
 
@@ -750,10 +737,10 @@ private struct MessageAction: View {
         } label: {
             Image(systemName: done ? doneImage ?? systemImage : systemImage)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(done ? Theme.acid : Theme.text)
+                .foregroundStyle(hovering ? Theme.ink : done ? Theme.acid : Theme.text)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 24, height: 22)
-                .background(hovering ? Theme.hover : .clear, in: Rectangle())
+                .background(MistBackground(firm: true, opacity: hovering ? 1 : 0, seed: systemImage.count, spill: CGSize(width: 6, height: 7)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -777,7 +764,7 @@ private struct NoteLabel: View {
 
 // MARK: - Composer
 
-/// Small icon toggle in the typing row; a solid white square while it's on.
+/// Small icon toggle in the typing row; a firm puff of mist while it's on.
 private struct ComposerToggle: View {
     let systemImage: String
     let isOn: Bool
@@ -789,9 +776,10 @@ private struct ComposerToggle: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(isOn ? Mood.cherry.color() : Theme.text)
+                .foregroundStyle(Theme.ink)
+                .opacity(isOn || hovering ? 1 : 0.55)
                 .frame(width: 28, height: 28)
-                .background(isOn ? Color.white : hovering ? Theme.hover : .clear, in: Rectangle())
+                .background(MistBackground(firm: true, opacity: isOn ? 1 : hovering ? 0.7 : 0, seed: systemImage.count, spill: CGSize(width: 3, height: 3)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -835,7 +823,7 @@ enum SpaceKey {
 
 // MARK: - Dock
 
-/// No buttons to talk: the whole window does that. What's left is the small print, in words.
+/// No buttons to talk: the whole window does that. What's left are a few puffs of mist.
 private struct Dock: View {
     @Environment(VoiceSession.self) private var session
     @AppStorage("chatOpen") private var chatOpen = false
@@ -847,7 +835,7 @@ private struct Dock: View {
     private var hasDraft: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 11) {
             if typing { typeBar } else { actions }
             Text(hint)
                 .font(.display(12, weight: .semibold))
@@ -857,6 +845,7 @@ private struct Dock: View {
                 .contentTransition(.opacity)
                 .allowsHitTesting(false)
         }
+        .padding(.leading, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.18), value: typing)
         .animation(.easeOut(duration: 0.2), value: hint)
@@ -867,7 +856,7 @@ private struct Dock: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 26) {
             TextAction(text: "Type", systemImage: "keyboard", help: "Type instead") { startTyping() }
             if !chatOpen, !session.lines.isEmpty {
                 TextAction(text: "Conversation \u{00B7} \(session.lines.count)", help: "Show the whole conversation (C)") { chatOpen = true }
@@ -901,10 +890,10 @@ private struct Dock: View {
     private var typeBar: some View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 6) {
-                TextField("", text: $draft, prompt: Text("Type something").foregroundStyle(Theme.text.opacity(0.8)), axis: .vertical)
+                TextField("", text: $draft, prompt: Text("Type something").foregroundStyle(Theme.ink.opacity(0.7)), axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.display(22, for: draft))
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(Theme.ink)
                     .lineLimit(1...4)
                     .focused($focused)
                     .onSubmit(send)
@@ -927,8 +916,9 @@ private struct Dock: View {
                 .disabled(hasDraft && !session.canToggle)
                 .padding(.leading, 8)
             }
-            .padding(.bottom, 6)
-            Rectangle().fill(Theme.text).frame(height: 2)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .background(MistBackground(firm: true, seed: 2, spill: CGSize(width: 12, height: 12)))
         }
     }
 
@@ -956,7 +946,7 @@ private struct Dock: View {
         }
         if session.micMuted { return "Mic muted  \u{00B7}  M to unmute" }
         if session.micOn { return "Click or Space to stop  \u{00B7}  M to mute" }
-        let start = session.lines.isEmpty ? "Space works too" : "Space to talk  \u{00B7}  drag the disc to rewind"
+        let start = session.lines.isEmpty ? "Space works too" : "Space to talk"
         return shortcuts.talk.map { "\(start)  \u{00B7}  \($0.display) from any app" } ?? start
     }
 }

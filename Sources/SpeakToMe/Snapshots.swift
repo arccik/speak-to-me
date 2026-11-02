@@ -49,8 +49,8 @@ enum Snapshots {
             session.modelID = "gemma-4-26b-a4b-it-4bit"
             session.levels.mic = mic
             session.levels.speaker = speaker
-            LatheEngine.shared = LatheEngine()
-            LatheEngine.shared.sync(lines: lines)
+            FaceEngine.shared = FaceEngine()
+            FaceEngine.shared.sync(lines: lines)
             playIn(phase, levels: session.levels, frames: name.hasPrefix("9") ? 18_000 : 420)
             let view = ContentView().environment(session).frame(width: size.width, height: size.height)
             let renderer = ImageRenderer(content: view)
@@ -61,36 +61,68 @@ enum Snapshots {
             try? png.write(to: dir.appendingPathComponent("\(name).png"))
         }
         renderPuck(to: dir)
+        renderMouths(to: dir)
         renderSettings(to: dir)
     }
 
-    /// A few seconds of syllables, so the newest grooves look the way they do mid-sentence.
+    /// A few seconds of syllables, so the ripples look the way they do mid-sentence.
     private static func playIn(_ phase: VoiceSession.Phase, levels: AudioLevels, frames: Int = 420) {
-        let engine = LatheEngine.shared
+        let engine = FaceEngine.shared
         let mic = levels.mic, speaker = levels.speaker
         var now = 0.0
         engine.step(phase: .ready, muted: false, levels: levels, now: now)
         for frame in 0..<frames {
             now += 1.0 / 30
-            let syllable = Float(max(0, sin(Double(frame) * 0.42) * sin(Double(frame) * 0.09 + 1)))
+            // Ending mid-syllable, so a still of it talking has its mouth open.
+            let syllable = frames - frame < 6 ? 1 : Float(max(0, sin(Double(frame) * 0.42) * sin(Double(frame) * 0.09 + 1)))
             levels.mic = mic * (0.25 + 0.75 * syllable)
             levels.speaker = speaker * (0.25 + 0.75 * syllable)
+            levels.speakerBands = SIMD3(0.12, 0.03, 0.008) * (0.25 + 0.75 * syllable)
             engine.step(phase: phase, muted: false, levels: levels, now: now)
         }
         levels.mic = mic
         levels.speaker = speaker
     }
 
-    /// The floating record, on a checker so its transparent corners show.
+    /// The lips on each kind of sound, from made-up voice bands. Loudness and hiss come
+    /// through as they would from the speaker; the first few frames learn this "voice".
+    private static func renderMouths(to dir: URL) {
+        guard let metal = FaceRenderer.shared else { return }
+        let sounds: [(String, Float, SIMD3<Float>)] = [
+            ("ah", 0.85, SIMD3(0.14, 0.05, 0.004)),
+            ("ee", 0.65, SIMD3(0.07, 0.09, 0.004)),
+            ("oo", 0.6, SIMD3(0.16, 0.012, 0.001)),
+            ("ss", 0.55, SIMD3(0.012, 0.03, 0.09)),
+            ("closed", 0, .zero),
+        ]
+        for (name, loudness, bands) in sounds {
+            let levels = AudioLevels()
+            FaceEngine.shared = FaceEngine()
+            var now = 0.0
+            FaceEngine.shared.step(phase: .ready, muted: false, levels: levels, now: now)
+            levels.speaker = 0.6
+            levels.speakerBands = SIMD3(0.14, 0.04, 0.004)
+            for _ in 0..<90 { now += 1.0 / 30; FaceEngine.shared.step(phase: .speaking, muted: false, levels: levels, now: now) }
+            levels.speaker = loudness
+            levels.speakerBands = bands
+            for _ in 0..<8 { now += 1.0 / 30; FaceEngine.shared.step(phase: .speaking, muted: false, levels: levels, now: now) }
+            guard let frame = metal.image(of: .shared, layout: FaceLayout(style: .puck), points: CGSize(width: 340, height: 340), scale: 2),
+                  let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:])
+            else { continue }
+            try? png.write(to: dir.appendingPathComponent("mouth-\(name).png"))
+        }
+    }
+
+    /// The floating face, on a checker so its transparent corners show.
     private static func renderPuck(to dir: URL) {
-        guard let metal = LatheRenderer.shared else { return }
+        guard let metal = FaceRenderer.shared else { return }
         for (name, phase) in [("listening", VoiceSession.Phase.hearing), ("thinking", .thinking), ("speaking", .speaking)] {
             let levels = AudioLevels()
             levels.mic = 0.7
             levels.speaker = 0.7
-            LatheEngine.shared = LatheEngine()
+            FaceEngine.shared = FaceEngine()
             playIn(phase, levels: levels)
-            guard let frame = metal.image(of: .shared, layout: LatheLayout(style: .puck), points: CGSize(width: 150, height: 150), scale: 2),
+            guard let frame = metal.image(of: .shared, layout: FaceLayout(style: .puck), points: CGSize(width: 150, height: 150), scale: 2),
                   let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:])
             else { continue }
             try? png.write(to: dir.appendingPathComponent("puck-\(name).png"))

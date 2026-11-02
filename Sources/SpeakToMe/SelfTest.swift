@@ -293,7 +293,7 @@ extension SelfTest {
             }
         }
         await audioSwitch()
-        await recordCost()
+        recordCost()
         exit(0)
     }
 
@@ -322,10 +322,10 @@ extension SelfTest {
         await MainActor.run { audio.stop() }
     }
 
-    /// What one frame of the record costs the GPU in the main window, mid-conversation.
-    private static func recordCost() async {
-        guard let renderer = LatheRenderer.shared else { return }
-        let engine = LatheEngine()
+    /// What one frame of the face costs the GPU in the main window, mid-conversation.
+    private static func recordCost() {
+        guard let renderer = FaceRenderer.shared else { return }
+        let engine = FaceEngine()
         let levels = AudioLevels()
         levels.speaker = 0.7
         var now = 0.0
@@ -333,10 +333,50 @@ extension SelfTest {
         for _ in 0..<1200 { now += 1.0 / 30; engine.step(phase: .speaking, muted: false, levels: levels, now: now) }
         let begin = Date()
         for _ in 0..<60 {
-            _ = renderer.image(of: engine, layout: LatheLayout(style: .stage, labelText: "SPEAK TO ME", hush: 270),
+            _ = renderer.image(of: engine, layout: FaceLayout(style: .stage, hush: 270),
                                points: CGSize(width: 520, height: 800), scale: 2)
         }
-        print(String(format: "RECORD %.1f ms a frame at 520x800 @2x, offscreen, including reading it back", Date().timeIntervalSince(begin) * 1000 / 60))
+        print(String(format: "FACE %.1f ms a frame at 520x800 @2x, offscreen, including reading it back", Date().timeIntervalSince(begin) * 1000 / 60))
+    }
+
+    /// `SpeakToMe --lipsynctest <audio file>`: runs real speech through the lips, as the speaker
+    /// tap would, and reports how much of each mouth shape it gets. Plays nothing.
+    static func lipSync(file path: String) {
+        guard let audio = try? AVAudioFile(forReading: URL(fileURLWithPath: path)),
+              let buffer = AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: AVAudioFrameCount(audio.length)),
+              (try? audio.read(into: buffer)) != nil, let data = buffer.floatChannelData?[0]
+        else { print("LIPS can't read \(path)"); exit(1) }
+        let rate = Float(audio.processingFormat.sampleRate)
+        let chunk = Int(rate * 1024 / 48_000)
+        let bands = VoiceBands(), levels = AudioLevels(), engine = FaceEngine()
+        var now = 0.0, frames = 0, shut = 0, open = 0, round = 0, wide = 0, hiss = 0, changes = 0, lastShape = 0
+        engine.step(phase: .ready, muted: false, levels: levels, now: now)
+        for start in stride(from: 0, to: Int(buffer.frameLength) - chunk, by: chunk) {
+            let samples = UnsafeBufferPointer(start: data + start, count: chunk)
+            levels.speaker = AudioLevels.rms(samples)
+            levels.speakerBands = bands.analyze(samples, sampleRate: rate)
+            now += Double(chunk) / Double(rate)
+            engine.step(phase: .speaking, muted: false, levels: levels, now: now)
+            frames += 1
+            if engine.jaw < 0.08 { shut += 1 }
+            if engine.jaw > 0.35 { open += 1 }
+            if engine.wide < -0.3 { round += 1 }
+            if engine.wide > 0.3 { wide += 1 }
+            if engine.teeth > 0.5 { hiss += 1 }
+            let shape = engine.jaw < 0.08 ? 0 : engine.teeth > 0.5 ? 1 : engine.wide < -0.3 ? 2 : engine.wide > 0.3 ? 3 : 4
+            if shape != lastShape { changes += 1; lastShape = shape }
+        }
+        func pct(_ n: Int) -> Int { n * 100 / max(frames, 1) }
+        print("LIPS \(frames) frames, shut \(pct(shut))%, open \(pct(open))%, round \(pct(round))%, wide \(pct(wide))%, hiss \(pct(hiss))%, \(String(format: "%.1f", Double(changes) / now)) shape changes a second")
+        recordCost()
+
+        // Left alone, it dozes off by the time drawing stops.
+        let sleeper = FaceEngine()
+        let quiet = AudioLevels()
+        var clock = 0.0
+        sleeper.step(phase: .ready, muted: false, levels: quiet, now: clock)
+        for _ in 0..<Int(FaceEngine.asleepAfter * 30) { clock += 1.0 / 30; sleeper.step(phase: .ready, muted: false, levels: quiet, now: clock) }
+        print(String(format: "DOZE eyes open %.2f after %.0f s with nothing going on", sleeper.eye, FaceEngine.asleepAfter))
     }
 
     /// `SpeakToMe --ssmltest`: SSML in a reply never reaches the screen or the words spoken,

@@ -80,6 +80,6 @@ Everything is in `Sources/SpeakToMe`.
 - `OMLXClient.swift`: model list, streaming chat with images and tool calls, model pinning
 - `Tools.swift`: web search, page reading, time, opening apps and pages
 - `SentenceChunker.swift`: splits the streamed reply into speakable pieces and strips markdown
-- `ContentView.swift` (window, chat), `SettingsView.swift`, `Visuals.swift`, `LatheEngine.swift` and `LatheRenderer.swift` (the record: groove history, disc motion, shader)
+- `ContentView.swift` (window, chat), `SettingsView.swift`, `Visuals.swift`, `FaceEngine.swift`, `FaceRenderer.swift` and `MistControls.swift` (the face: lips from the voice, expression, shader, and the mist behind the controls)
 - `ScreenVision.swift`, `Languages.swift`, `SoundCues.swift`, `HotKey.swift`, `MiniOrb.swift`, `ConversationStore.swift`
 - `SelfTest.swift`, `Snapshots.swift`, `MicDiagnostics.swift`, `Bench.swift`: the test modes above

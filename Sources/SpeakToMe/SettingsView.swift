@@ -10,8 +10,8 @@ struct SettingsView: View {
 
         var subtitle: String {
             switch self {
-            case .general: return "Sounds, the floating record and your history"
-            case .shortcuts: return "Talk or bring up the record from any app"
+            case .general: return "Sounds, the floating face and your history"
+            case .shortcuts: return "Talk or bring up the face from any app"
             case .voice: return "Which model speaks each language, and how"
             case .cloning: return "Hear replies in a voice you record"
             case .conversation: return "Turn-taking, personality and tools"
@@ -42,7 +42,7 @@ struct SettingsView: View {
                 Label {
                     Text(pane.title)
                 } icon: {
-                    Image(systemName: pane.icon).foregroundStyle(Theme.vinyl)
+                    Image(systemName: pane.icon).foregroundStyle(Theme.accent)
                 }
                 .padding(.vertical, 2)
             }
@@ -76,7 +76,7 @@ struct SettingsView: View {
             .navigationTitle(pane.title)
         }
         .frame(width: 720, height: Self.height)
-        .tint(Theme.vinyl)
+        .tint(Theme.accent)
     }
 }
 
@@ -143,15 +143,15 @@ private struct GeneralPane: View {
                 Toggle("Speak replies out loud", isOn: Binding(get: { !session.muteReplies }, set: { session.muteReplies = !$0 }))
             }
             Section {
-                Toggle("Show the floating record", isOn: $orbVisible)
+                Toggle("Show the floating face", isOn: $orbVisible)
                     .onChange(of: orbVisible) {
                         orbVisible ? MiniOrbController.shared.show(session: session) : MiniOrbController.shared.hide()
                     }
                 Toggle("Show it when I use the talk shortcut in another app", isOn: $orbOnHotKey)
             } header: {
-                Text("Floating record")
+                Text("Floating face")
             } footer: {
-                Footer("A small always-on-top record you can drag anywhere. Click it to start or stop, right-click for options.")
+                Footer("A small always-on-top face you can drag anywhere. Click it to start or stop, right-click for options.")
             }
             Section {
                 LabeledContent("Saved conversations") {
@@ -183,7 +183,7 @@ private struct ShortcutsPane: View {
         Form {
             Section {
                 row("Start or stop talking", detail: "Works in every app", action: .talk)
-                row("Show or hide the floating record", detail: "Keep it in a corner while you work", action: .floatingOrb)
+                row("Show or hide the floating face", detail: "Keep it in a corner while you work", action: .floatingOrb)
             } header: {
                 Text("From any app")
             } footer: {
@@ -725,7 +725,7 @@ private struct PresetChip: View {
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? AnyShapeStyle(Theme.vinyl) : AnyShapeStyle(Color.primary.opacity(0.07)), in: Capsule())
+                .background(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color.primary.opacity(0.07)), in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

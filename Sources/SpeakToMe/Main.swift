@@ -45,6 +45,10 @@ enum Main {
             Task.detached { await SelfTest.clips() }
             dispatchMain()
         }
+        if let flag = args.firstIndex(of: "--lipsynctest"), args.indices.contains(flag + 1) {
+            SelfTest.lipSync(file: args[flag + 1])
+            exit(0)
+        }
         if args.contains("--ssmltest") {
             let flag = args.firstIndex(of: "--ssmltest")! + 1
             let model = args.indices.contains(flag) ? args[flag] : nil
