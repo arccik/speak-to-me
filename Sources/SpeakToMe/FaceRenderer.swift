@@ -89,13 +89,14 @@ struct PortraitMap {
         }
         let size = SIMD2(Float(image.width), Float(image.height))
         // Positions measured on the shipped portrait, as a fraction of its size, in case Vision finds nothing.
-        var left = SIMD2<Float>(0.493, 0.454), right = SIMD2<Float>(0.620, 0.439)
-        var eyeWidths = SIMD2<Float>(0.0625, 0.051)
-        var lipsL = SIMD2<Float>(0.498, 0.600), lipsR = SIMD2<Float>(0.615, 0.600)
-        var chin: Float = 0.683
+        var left = SIMD2<Float>(0.463, 0.510), right = SIMD2<Float>(0.553, 0.510)
+        var eyeWidths = SIMD2<Float>(0.0394, 0.0387)
+        var lipsL = SIMD2<Float>(0.470, 0.709), lipsR = SIMD2<Float>(0.545, 0.702)
+        var chin: Float = 0.847
         let request = VNDetectFaceLandmarksRequest()
         try? VNImageRequestHandler(cgImage: image).perform([request])
-        if let marks = request.results?.first?.landmarks,
+        // The portrait has a crowd behind the persona; the biggest face is the one that speaks.
+        if let marks = request.results?.max(by: { $0.boundingBox.width < $1.boundingBox.width })?.landmarks,
            let eyeL = marks.leftEye, let eyeR = marks.rightEye, let lips = marks.outerLips, let contour = marks.faceContour {
             let extent = CGSize(width: image.width, height: image.height)
             func points(_ region: VNFaceLandmarkRegion2D) -> [SIMD2<Float>] {
