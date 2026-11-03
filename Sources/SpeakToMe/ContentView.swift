@@ -11,7 +11,7 @@ enum Theme {
     /// Words on a wisp of mist.
     static let ink = Mood.youInk.color()
     /// Long replies in the conversation.
-    static let replyText = RGBA.hex(0xD8D2BC).color()
+    static let replyText = RGBA.hex(0xC8DCEB).color()
     static let text = Mood.youInk.color()
 }
 

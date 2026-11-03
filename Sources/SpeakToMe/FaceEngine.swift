@@ -21,6 +21,7 @@ final class FaceEngine {
 
     // Lips.
     private(set) var jaw = 0.0
+    private var jawSpeed = 0.0
     /// -1 is pursed and round (oo), 1 is stretched wide (ee).
     private(set) var wide = 0.0
     private(set) var teeth = 0.0
@@ -28,6 +29,9 @@ final class FaceEngine {
 
     // The rest of the face.
     private(set) var eye = 1.0
+    /// How brightly the eyes burn, and the line of light through them when the voice lands on something.
+    private(set) var glow = 0.55
+    private(set) var flare = 0.0
     private(set) var gaze = SIMD2<Double>.zero
     private(set) var browLeft = 0.0
     private(set) var browRight = 0.0
@@ -129,6 +133,7 @@ final class FaceEngine {
         jaw = mood.mouth
         wide = mood.mouthWide
         eye = mood.eye
+        glow = mood.glow
         smile = mood.smile
         browLeft = mood.brow
         browRight = mood.brow
@@ -155,7 +160,15 @@ final class FaceEngine {
             teethTarget = closing
         }
         jawTarget *= 1 - startle
-        jaw += (jawTarget - jaw) * (1 - exp(-dt * (jawTarget > jaw ? 34 : 20)))
+        // On a spring, so the jaw swings open and settles like something with weight.
+        let stiffness = jawTarget > jaw ? 900.0 : 600.0
+        var left = dt
+        while left > 0 {
+            let h = min(left, 1.0 / 240)
+            jawSpeed += ((jawTarget - jaw) * stiffness - jawSpeed * 2 * stiffness.squareRoot() * 0.55) * h
+            jaw = max(0, jaw + jawSpeed * h)
+            left -= h
+        }
         wide += (wideTarget - wide) * (1 - exp(-dt * 11))
         teeth += (teethTarget - teeth) * (1 - exp(-dt * 26))
         breath += (reply - breath) * (1 - exp(-dt * (reply > breath ? 10 : 2.5)))
@@ -198,6 +211,13 @@ final class FaceEngine {
         smile += (mood.smile * (1 - startle) - smile) * settle
         thought += (mood.thought - thought) * (1 - exp(-dt * 3))
         cloudLight += (mood.cloudLight - cloudLight) * settle
+
+        // The eyes flare up with each syllable and every lift of the brows, and pulse while it thinks.
+        let pulse = mood.thought > 0.3 ? sin(clock * 2.6) * 0.3 : 0
+        let burn = mood.glow + pulse + (browLeft + browRight) / 2 * 0.4 + reply * 0.85 + you * 0.3
+        glow += (burn - glow) * (1 - exp(-dt * (burn > glow ? 22 : 8)))
+        let wake = frontStrength * max(0, 1 - front / 700) * 0.6
+        flare = max(emphasis * 0.85, startle, wake)
 
         if reduceMotion {
             tilt = 0
