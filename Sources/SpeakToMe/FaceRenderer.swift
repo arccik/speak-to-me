@@ -484,9 +484,15 @@ final class FaceRenderer {
     /// The mask's lower plate, in head units: its top edge peaks at the bridge of the nose, dips
     /// to where the glow under each eye ends, and runs back up along that glow to the cheeks; its
     /// sides close in to the chin. Measured on the film.
+    /// Curved like a face rather than ruled: a rounded peak, sides that fall steeply and then ease
+    /// into each dip, a soft turn at the bottom, and a gentle arc back up along the glow.
     static float plateTop(float x) {
-        float a = abs(x);
-        return a < 56 ? 18 + 75 * pow(a / 56, 0.9) : 93 - (a - 56) * 0.46;
+        float a = sqrt(x * x + 49) - 7;
+        float inner = 18 + 80 * sin(1.5708 * saturate(a / 62));
+        float out = a - 56;
+        float outer = 93 - 0.42 * out - 0.0007 * max(out, 0.0) * out;
+        float h = saturate(0.5 + 0.5 * (outer - inner) / 12);
+        return mix(outer, inner, h) - 12 * h * (1 - h);
     }
 
     /// How much of the drop reaches this far out: at the cheeks the plate slides in under them.
