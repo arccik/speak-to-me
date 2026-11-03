@@ -95,7 +95,7 @@ final class VoiceSession {
     var f5Steps = StoredSetting.value("f5Steps", default: 8) { didSet { StoredSetting.store(f5Steps, "f5Steps") } }
     /// F5-TTS Russian: mark word stress first, as it was trained to read.
     var f5MarksStress = StoredSetting.value("f5MarksStress", default: true) { didSet { StoredSetting.store(f5MarksStress, "f5MarksStress") } }
-    /// The model may use SSML for pauses, speed and pitch, and we perform it. Off, any tags are just dropped.
+    /// The model may use SSML for pauses and speed, and we perform it. Off, any tags are just dropped.
     var expressiveVoice = StoredSetting.value("expressiveVoice", default: false) { didSet { StoredSetting.store(expressiveVoice, "expressiveVoice") } }
     var myVoiceStatus: String?
     private(set) var myVoiceBusy = false
@@ -127,7 +127,7 @@ final class VoiceSession {
 
     static let expressivePrompt = """
          You can shape how your voice sounds with exactly these tags: <break time="500ms"/> for a pause, and \
-        <prosody rate="slow" pitch="-2st">words</prosody> for speed (slow or fast) and pitch (from -4st to +4st). \
+        <prosody rate="slow">words</prosody> for speed (slow or fast). \
         Use them only where they add feeling, usually not at all in a short plain answer, and never mention them.
         """
 

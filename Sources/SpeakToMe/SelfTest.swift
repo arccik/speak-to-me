@@ -380,7 +380,7 @@ extension SelfTest {
     }
 
     /// `SpeakToMe --ssmltest`: SSML in a reply never reaches the screen or the words spoken,
-    /// and its pauses, rate and pitch change the audio, on every engine. Plays nothing.
+    /// and its pauses and rate change the audio, on every engine. Plays nothing.
     /// With a model name it only asks that model, with and without Expressive voice's prompt.
     static func ssml(model: String? = nil) async {
         var failures = 0
@@ -436,8 +436,8 @@ extension SelfTest {
         print("     pieces: \(pieces)")
         let segments = pieces.flatMap(SSML.segments(of:))
         print("     segments: \(segments)")
-        let spokenWords = segments.compactMap { segment -> (String, Float, Float)? in
-            if case .words(let w, let r, let s) = segment { return (w, r, s) }
+        let spokenWords = segments.compactMap { segment -> (String, Float)? in
+            if case .words(let w, let r) = segment { return (w, r) }
             return nil
         }
         let pauses = segments.compactMap { segment -> Float? in
@@ -445,9 +445,19 @@ extension SelfTest {
             return nil
         }
         check("both sentences kept their prosody across the cut",
-              spokenWords.count == 2 && spokenWords.allSatisfy { $0.1 == 0.8 && $0.2 == -2 })
+              spokenWords.count == 2 && spokenWords.allSatisfy { $0.1 == 0.8 })
         check("both pauses found", pauses == [1, 0.5], pauses)
         check("no tag in the words", !spokenWords.contains { $0.0.contains("<") || $0.0.contains("prosody") })
+
+        // As a real model wrote it: nothing closed, and a break that's half a closing tag.
+        var unclosedChunker = SentenceChunker()
+        let unclosed = #"<prosody rate="slow" pitch="-2st">The first sentence is here.</break time="500ms"/><prosody rate="slow" pitch="-2st">The second sentence is here. <prosody pitch="-3st">The third sentence is here."#
+        let unclosedPieces = unclosedChunker.push(unclosed) + unclosedChunker.finish()
+        let unclosedRates = unclosedPieces.flatMap(SSML.segments(of:)).compactMap { segment -> Float? in
+            if case .words(_, let r) = segment { return r }
+            return nil
+        }
+        check("unclosed tags don't pile up", !unclosedRates.isEmpty && unclosedRates.allSatisfy { $0 == 0.8 }, unclosedRates)
 
         let speech: SpeechModels
         do { speech = try await SpeechModels.load(voice: "af_heart") { _ in } } catch {

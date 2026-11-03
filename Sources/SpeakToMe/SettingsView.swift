@@ -256,7 +256,7 @@ private struct VoicePane: View {
             Section {
                 Toggle("Expressive voice", isOn: $session.expressiveVoice)
             } footer: {
-                Footer("Lets the language model add pauses and change the speed and pitch of its voice, with any speech model and in any language. Applies from the next reply.")
+                Footer("Lets the language model add pauses and change the speed of its voice, with any speech model and in any language. Applies from the next reply.")
             }
         }
     }

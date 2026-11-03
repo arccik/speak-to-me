@@ -87,11 +87,10 @@ final class SpeechModels {
             switch segment {
             case .pause(let seconds):
                 out += [Float](repeating: 0, count: Int(seconds * 24_000))
-            case .words(let words, let rate, let semitones):
-                // Lowering the pitch also slows it down, so have the engine speak that much faster.
+            case .words(let words, let rate):
                 var adjusted = setup
-                adjusted.speed = setup.speed * rate / SSML.pitchFactor(semitones)
-                out += SSML.shifted(try await speakWords(words, language: language, using: adjusted), semitones: semitones)
+                adjusted.speed = setup.speed * rate
+                out += try await speakWords(words, language: language, using: adjusted)
             }
         }
         return out

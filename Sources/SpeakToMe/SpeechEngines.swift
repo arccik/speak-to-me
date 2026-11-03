@@ -117,7 +117,7 @@ struct SpeechSetup: Sendable {
     /// Supertonic-3's voice.
     var languageVoice = MultilingualVoices.defaultVoice
     var speed: Float = 1
-    /// Perform SSML in replies (pauses, rate, pitch) rather than just speaking the words.
+    /// Perform SSML in replies (pauses, rate) rather than just speaking the words.
     var expressive = true
     /// The voice file PocketTTS speaks with, when one has been recorded.
     var clonedVoice: String?

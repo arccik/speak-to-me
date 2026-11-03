@@ -1,13 +1,13 @@
 import Foundation
 
 /// Models sometimes write SSML (`<prosody>`, `<break>`). None of our speech models read it,
-/// so we perform it ourselves, the same way for all of them: pauses become silence, rate
-/// goes to the engine's speed, and pitch is a resample of what it says. The tags themselves
-/// are never shown or spoken.
+/// so we perform it ourselves, the same way for all of them: pauses become silence and rate
+/// goes to the engine's speed. Pitch is ignored: resampling it sounded like a put-on voice.
+/// The tags themselves are never shown or spoken.
 enum SSML {
     enum Segment: Equatable {
         case pause(seconds: Float)
-        case words(String, rate: Float, semitones: Float)
+        case words(String, rate: Float)
     }
 
     private static let names = ["speak", "prosody", "break", "emphasis", "voice", "lang", "say-as", "sub",
@@ -52,14 +52,14 @@ enum SSML {
 
     static func segments(of text: String) -> [Segment] {
         var result: [Segment] = []
-        var stack: [(rate: Float, semitones: Float)] = []
+        var rates: [Float] = []
         var position = text.startIndex
 
         func addWords(_ range: Range<String.Index>) {
             let words = text[range].replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard words.contains(where: { $0.isLetter || $0.isNumber }) else { return }
-            result.append(.words(words, rate: stack.last?.rate ?? 1, semitones: stack.last?.semitones ?? 0))
+            result.append(.words(words, rate: rates.last ?? 1))
         }
 
         for tag in tags(in: text) {
@@ -71,11 +71,12 @@ enum SSML {
                 if seconds > 0 { result.append(.pause(seconds: seconds)) }
             case "prosody":
                 if tag.closing {
-                    _ = stack.popLast()
+                    _ = rates.popLast()
                 } else if !tag.selfClosing {
-                    let outer = stack.last ?? (1, 0)
-                    stack.append((min(1.6, max(0.5, outer.rate * rate(attribute("rate", of: tag.source)))),
-                                  min(6, max(-6, outer.semitones + semitones(attribute("pitch", of: tag.source))))))
+                    // Models often forget to close a tag before the next, so an inner rate replaces
+                    // the outer one rather than multiplying it, or the voice drifts further each time.
+                    let newRate = attribute("rate", of: tag.source)
+                    rates.append(newRate == nil ? rates.last ?? 1 : min(1.6, max(0.5, rate(newRate))))
                 }
             default: break
             }
@@ -83,23 +84,6 @@ enum SSML {
         addWords(position..<text.endIndex)
         return result
     }
-
-    /// Plays `samples` at another pitch: faster and higher, or slower and lower.
-    static func shifted(_ samples: [Float], semitones: Float) -> [Float] {
-        guard semitones != 0, samples.count > 1 else { return samples }
-        let step = pitchFactor(semitones)
-        let count = Int(Float(samples.count - 1) / step)
-        var out = [Float](repeating: 0, count: count)
-        for i in 0..<count {
-            let at = Float(i) * step
-            let low = Int(at)
-            let fraction = at - Float(low)
-            out[i] = samples[low] + (samples[low + 1] - samples[low]) * fraction
-        }
-        return out
-    }
-
-    static func pitchFactor(_ semitones: Float) -> Float { pow(2, semitones / 12) }
 
     // MARK: Reading tags
 
@@ -164,23 +148,6 @@ enum SSML {
             guard value.hasSuffix("%"), let percent = Float(value.dropLast()) else { return 1 }
             // "+10%" changes the rate; "90%" sets it.
             return value.hasPrefix("+") || value.hasPrefix("-") ? 1 + percent / 100 : percent / 100
-        }
-    }
-
-    private static func semitones(_ value: String?) -> Float {
-        guard let value else { return 0 }
-        switch value {
-        case "x-low": return -4
-        case "low": return -2
-        case "medium", "default": return 0
-        case "high": return 2
-        case "x-high": return 4
-        default:
-            if value.hasSuffix("st") { return Float(value.dropLast(2)) ?? 0 }
-            if value.hasSuffix("%"), let percent = Float(value.dropLast()), percent > -100 {
-                return 12 * log2(1 + percent / 100)
-            }
-            return 0
         }
     }
 }
