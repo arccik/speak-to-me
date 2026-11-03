@@ -347,6 +347,7 @@ final class FaceRenderer {
         var bob: Float
         var shudder: Float
         var jaw: Float
+        var late: Float
         var wide: Float
         var eye: Float
         var glow: Float
@@ -432,6 +433,7 @@ final class FaceRenderer {
             bob: Float(engine.bob),
             shudder: Float(engine.startle),
             jaw: Float(engine.jaw),
+            late: Float(engine.lateJaw),
             wide: Float(engine.wide),
             eye: Float(engine.eye),
             glow: Float(engine.glow),
@@ -464,7 +466,7 @@ final class FaceRenderer {
     struct FaceUniforms {
         float2 size, center, gaze;
         float4 film;
-        float scale, unit, time, hushY, tilt, bob, shudder, jaw, wide, eye, glow, flare, sparks,
+        float scale, unit, time, hushY, tilt, bob, shudder, jaw, late, wide, eye, glow, flare, sparks,
               thought, light, front, frontStrength, puck, ringStrength;
         float4 sky, skyOld, said, heard, mouth, eyeA, eyeB;
     };
@@ -495,6 +497,25 @@ final class FaceRenderer {
     static float plate(float2 q) {
         float inside = min(min(q.y - plateTop(q.x), plateSide(q.y) - abs(q.x)), 262 - q.y);
         return smoothstep(-1.2, 1.2, inside);
+    }
+
+    /// The two chevrons cut into the plate, along the slanted edges in the film: the upper one runs
+    /// from the tip of the nose down the jaw plates and marks off the middle piece, the lower one
+    /// starts under the upper lip and marks off the piece at the centre of the chin.
+    static float upperChevron(float x) { return 86 + 1.15 * abs(x); }
+    static float lowerChevron(float x) { return 118 + 1.5 * abs(x); }
+    static float below(float2 q, float line) { return smoothstep(-1.2, 1.2, q.y - line); }
+
+    /// Looking into a gap between two pieces: the underside of the edge above, in shadow, then a
+    /// deep cavity lit softly from within. `depth` is how far into the gap, `height` how open it is.
+    static float3 hollow(float depth, float height, float3 rim, float shine, float burn, float3 ice) {
+        float t = saturate(depth / max(height, 0.5));
+        float lip = min(height * 0.3, 3.5);
+        float3 underside = rim * 0.32 * (1 - 0.6 * saturate(depth / max(lip, 0.5)));
+        float3 cavity = float3(0.004, 0.009, 0.022);
+        cavity += ice * exp(-pow((t - 0.62) / 0.3, 2.0)) * (0.65 + 0.45 * shine) * burn * 0.55;
+        cavity *= smoothstep(0.0, 0.35, t) * smoothstep(1.0, 0.82, t) * 0.8 + 0.2;
+        return mix(underside, cavity, smoothstep(lip * 0.6, lip * 1.4, depth));
     }
 
     /// Sound in the sky: rings of the voice, spaced evenly, each as loud as the moment it left.
@@ -539,7 +560,8 @@ final class FaceRenderer {
         hush *= mix(0.45, 1.0, smoothstep(56 * u.scale, 120 * u.scale, p.y));
 
         // The jaw: the whole lower plate of the mask, from the bridge of the nose to the chin, swings
-        // down in one piece, a touch larger as it comes towards you and rocking a little as it talks.
+        // down, a touch larger as it comes towards you and rocking a little as it talks. Inside it the
+        // two chevron pieces slide further, one after the other, like a mechanism opening.
         float opening = smoothstep(0.01, 0.06, u.jaw) * onHead;
         float drop = u.jaw * u.mouth.z * (1 + 0.3 * max(-u.wide, 0.0) - 0.15 * max(u.wide, 0.0));
         float rock = 0.02 * u.jaw * sin(u.time * 5.3);
@@ -551,7 +573,15 @@ final class FaceRenderer {
         float2 moved = q + pivot;
         float onPlate = plate(moved) * onHead;
         float leftBehind = plate(g) * (1 - onPlate) * step(g.y, plateTop(g.x) + drop * reachHere * 1.3 + 2) * opening;
-        float2 s = mix(g, moved, onPlate);
+        float middleDrop = u.jaw * 9, lowerDrop = u.late * 8;
+        float2 movedMiddle = moved - float2(0, middleDrop);
+        float2 movedLower = movedMiddle - float2(0, lowerDrop);
+        float lowerPiece = below(movedLower, lowerChevron(movedLower.x));
+        float middlePiece = below(movedMiddle, upperChevron(movedMiddle.x)) * (1 - below(movedMiddle, lowerChevron(movedMiddle.x))) * (1 - lowerPiece);
+        float outerPiece = 1 - below(moved, upperChevron(moved.x));
+        float between = onPlate * saturate(1 - outerPiece - middlePiece - lowerPiece) * opening;
+        float2 s = mix(mix(moved, movedMiddle, middlePiece), movedLower, lowerPiece);
+        s = mix(g, s, onPlate);
 
         // The film, faded at its top and bottom into more of the same sky.
         float2 uv = u.film.xy + s * u.film.zw;
@@ -608,17 +638,24 @@ final class FaceRenderer {
         color *= 1 - 0.4 * exp(-fromEdge / 5) * onPlate * opening;
         color += ice * exp(-fromEdge / 1.6) * onPlate * burn * 0.28 * saturate(height / 4);
         if (leftBehind > 0) {
-            float depth = g.y - plateTop(g.x);
-            float t = saturate(depth / height);
-            // The underside of the upper face: its own edge, seen from below, in shadow.
-            float lip = min(height * 0.3, 3.5);
-            float2 edgeAt = u.film.xy + float2(g.x, plateTop(g.x) - 1.5) * u.film.zw;
-            float3 underside = film.sample(edge, edgeAt).rgb * 0.32 * (1 - 0.6 * saturate(depth / max(lip, 0.5)));
-            float3 cavity = float3(0.004, 0.009, 0.022);
-            cavity += ice * exp(-pow((t - 0.62) / 0.3, 2.0)) * (0.65 + 0.45 * shine) * burn * 0.55;
-            cavity *= smoothstep(0.0, 0.35, t) * smoothstep(1.0, 0.82, t) * 0.8 + 0.2;
-            float3 inside = mix(underside, cavity, smoothstep(lip * 0.6, lip * 1.4, depth));
-            color = mix(color, inside, leftBehind);
+            float3 rim = film.sample(edge, u.film.xy + float2(g.x, plateTop(g.x) - 1.5) * u.film.zw).rgb;
+            color = mix(color, hollow(g.y - plateTop(g.x), height, rim, shine, burn, ice), leftBehind);
+        }
+        // The chevron pieces: each top edge darkens into its crease and catches the light, and the
+        // gap each leaves behind opens onto the same hollow.
+        float fromMiddle = max(movedMiddle.y - upperChevron(movedMiddle.x), 0.0);
+        float fromLower = max(movedLower.y - lowerChevron(movedLower.x), 0.0);
+        float pieceEdge = middlePiece * exp(-fromMiddle / 4) + lowerPiece * exp(-fromLower / 4);
+        float pieceRim = middlePiece * exp(-fromMiddle / 1.4) * saturate(middleDrop / 3)
+            + lowerPiece * exp(-fromLower / 1.4) * saturate(lowerDrop / 3);
+        color *= 1 - 0.4 * pieceEdge * onPlate * opening;
+        color += ice * pieceRim * onPlate * burn * 0.3;
+        if (between > 0) {
+            bool upper = movedMiddle.y < lowerChevron(movedMiddle.x);
+            float2 above = upper ? moved : movedMiddle;
+            float line = upper ? upperChevron(above.x) : lowerChevron(above.x);
+            float3 rim = film.sample(edge, u.film.xy + float2(above.x, line - 1.5) * u.film.zw).rgb;
+            color = mix(color, hollow(above.y - line, upper ? middleDrop : lowerDrop, rim, shine, burn * 0.8, ice), between);
         }
         // A little of the light spills out over the face above the gap.
         float above = plateTop(g.x) - g.y;

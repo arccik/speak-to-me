@@ -22,6 +22,9 @@ final class FaceEngine {
     // Lips.
     private(set) var jaw = 0.0
     private var jawSpeed = 0.0
+    /// The jaw again, a beat behind, for the piece at the centre of the chin.
+    private(set) var lateJaw = 0.0
+    private var lateSpeed = 0.0
     /// -1 is pursed and round (oo), 1 is stretched wide (ee).
     private(set) var wide = 0.0
     private(set) var teeth = 0.0
@@ -167,6 +170,8 @@ final class FaceEngine {
             let h = min(left, 1.0 / 240)
             jawSpeed += ((jawTarget - jaw) * stiffness - jawSpeed * 2 * stiffness.squareRoot() * 0.55) * h
             jaw = max(0, jaw + jawSpeed * h)
+            lateSpeed += ((jaw - lateJaw) * 260 - lateSpeed * 2 * 260.0.squareRoot() * 0.5) * h
+            lateJaw = max(0, lateJaw + lateSpeed * h)
             left -= h
         }
         wide += (wideTarget - wide) * (1 - exp(-dt * 11))
