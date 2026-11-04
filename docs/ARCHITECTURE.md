@@ -40,6 +40,13 @@ Everything else speaks through Core ML; [F5-TTS Russian](https://huggingface.co/
 ## Tests and diagnostics
 
 ```bash
+bash scripts/test-speech-text.sh
+```
+Fast, deterministic speech-text regression tests with no model downloads or server.
+Checks thinking tags at every token split, long sentence streaming, abbreviations,
+CJK punctuation and prosody carried across chunks.
+
+```bash
 build/SpeakToMe.app/Contents/MacOS/SpeakToMe --selftest [model]
 ```
 Whole voice pipeline without a mic (Kokoro speaks a question → Parakeet → oMLX → Kokoro), with per-stage timings.

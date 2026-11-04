@@ -39,7 +39,9 @@ actor TTSWorker {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         let withoutFinal = trimmed.last.map { ".!?;:,".contains($0) } == true ? String(trimmed.dropLast()) : trimmed + "."
         for variant in [trimmed, withoutFinal, trimmed + "."] {
+            try Task.checkCancellation()
             let worker = try await liveWorker()
+            try Task.checkCancellation()
             do {
                 return try await worker.request(variant, voice: voice, speed: speed, clonedVoice: clonedVoice)
             } catch WorkerProcess.WorkerError.crashed {
@@ -174,7 +176,9 @@ actor WorkerProcess {
 
     /// Sends one request; resolves with the samples (empty for commands like "clone").
     func send(_ request: [String: Any]) async throws -> [Float] {
+        try Task.checkCancellation()
         if process?.isRunning != true { try await start(progress: progress) }
+        try Task.checkCancellation()
         nextID += 1
         let id = nextID
         var line = request

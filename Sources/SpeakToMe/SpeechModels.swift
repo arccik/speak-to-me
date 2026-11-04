@@ -60,8 +60,10 @@ final class SpeechModels {
     }
 
     func transcribe(_ samples: [Float]) async throws -> String {
+        try Task.checkCancellation()
         var state = TdtDecoderState.make(decoderLayers: await asr.decoderLayerCount)
         let result = try await asr.transcribe(samples, decoderState: &state)
+        try Task.checkCancellation()
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -80,10 +82,12 @@ final class SpeechModels {
 
     /// Speaks `text`, performing any SSML in it (see `SSML`).
     func speak(_ text: String, language: String = "en", using setup: SpeechSetup) async throws -> [Float] {
+        try Task.checkCancellation()
         guard SSML.hasMarkup(text) else { return try await speakWords(text, language: language, using: setup) }
         guard setup.expressive else { return try await speakWords(SSML.plain(text), language: language, using: setup) }
         var out: [Float] = []
         for segment in SSML.segments(of: text) {
+            try Task.checkCancellation()
             switch segment {
             case .pause(let seconds):
                 out += [Float](repeating: 0, count: Int(seconds * 24_000))
@@ -100,12 +104,17 @@ final class SpeechModels {
     private func speakWords(_ text: String, language: String, using setup: SpeechSetup) async throws -> [Float] {
         var failure: Error?
         for engine in setup.route(for: language) {
+            try Task.checkCancellation()
             do {
                 if let samples = try await synthesize(text, with: engine, language: language, setup: setup),
                    !samples.isEmpty {
+                    try Task.checkCancellation()
                     return samples
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                try Task.checkCancellation()
                 failure = error
             }
         }

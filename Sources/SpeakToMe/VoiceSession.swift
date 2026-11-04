@@ -1055,6 +1055,7 @@ final class VoiceSession {
         let turnLanguage = matchLanguage ? language : "en"
         let ttsTask = Task {
             for await sentence in sentences {
+                if Task.isCancelled { return }
                 if muted { continue }
                 // Per-sentence detection catches a reply that switches language; short ones follow the turn.
                 let sentenceLanguage = LanguageDetector.detect(SSML.plain(sentence)) ?? turnLanguage
@@ -1067,56 +1068,58 @@ final class VoiceSession {
         }
 
         var chunker = SentenceChunker()
-        do {
-            for round in 0..<4 {
-                var calls: [OMLXClient.ToolCall] = []
-                var roundText = ""
-                let tools = useTools && round < 3 ? Tools.definitions : []
-                for try await event in client.streamChat(model: modelID, messages: messages, tools: tools) {
-                    try Task.checkCancellation()
-                    switch event {
-                    case .text(let token):
-                        turn.reply += token
-                        roundText += token
-                        showReply(turn)
-                        for sentence in chunker.push(token) { sentenceSink.yield(sentence) }
-                    case .toolCall(let call):
-                        calls.append(call)
+        try await withTaskCancellationHandler {
+            do {
+                for round in 0..<4 {
+                    var calls: [OMLXClient.ToolCall] = []
+                    var roundText = ""
+                    let tools = useTools && round < 3 ? Tools.definitions : []
+                    for try await event in client.streamChat(model: modelID, messages: messages, tools: tools) {
+                        try Task.checkCancellation()
+                        switch event {
+                        case .text(let token):
+                            turn.reply += token
+                            roundText += token
+                            showReply(turn)
+                            for sentence in chunker.push(token) { sentenceSink.yield(sentence) }
+                        case .toolCall(let call):
+                            calls.append(call)
+                        }
                     }
-                }
-                showReply(turn, now: true)
-                guard !calls.isEmpty else { break }
+                    showReply(turn, now: true)
+                    guard !calls.isEmpty else { break }
 
-                for sentence in chunker.finish() { sentenceSink.yield(sentence) }
-                chunker = SentenceChunker()
-                if turn.reply.isEmpty, let filler = calls.lazy.compactMap(Tools.filler).first,
-                   turnLanguage == "en" || !matchLanguage {
-                    sentenceSink.yield(filler)
-                }
-                messages.append(.init(role: "assistant", content: SentenceChunker.visible(roundText), toolCalls: calls))
-                for call in calls {
-                    // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
-                    while Tools.hasSideEffects(call) && !turn.committed {
-                        try await Task.sleep(for: .milliseconds(50))
+                    for sentence in chunker.finish() { sentenceSink.yield(sentence) }
+                    chunker = SentenceChunker()
+                    if turn.reply.isEmpty, let filler = calls.lazy.compactMap(Tools.filler).first,
+                       turnLanguage == "en" || !matchLanguage {
+                        sentenceSink.yield(filler)
                     }
-                    turn.notes.append(Tools.label(for: call))
-                    if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
-                    let result = await Tools.run(call, client: client)
-                    try Task.checkCancellation()
-                    messages.append(.init(role: "tool", content: result, toolCallID: call.id))
+                    messages.append(.init(role: "assistant", content: SentenceChunker.visible(roundText), toolCalls: calls))
+                    for call in calls {
+                        // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
+                        while Tools.hasSideEffects(call) && !turn.committed {
+                            try await Task.sleep(for: .milliseconds(50))
+                        }
+                        turn.notes.append(Tools.label(for: call))
+                        if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
+                        let result = await Tools.run(call, client: client)
+                        try Task.checkCancellation()
+                        messages.append(.init(role: "tool", content: result, toolCallID: call.id))
+                    }
                 }
-            }
-            for sentence in chunker.finish() { sentenceSink.yield(sentence) }
-            sentenceSink.finish()
-            await withTaskCancellationHandler {
+                for sentence in chunker.finish() { sentenceSink.yield(sentence) }
+                sentenceSink.finish()
                 await ttsTask.value
-            } onCancel: {
+                try Task.checkCancellation()
+            } catch {
+                sentenceSink.finish()
                 ttsTask.cancel()
+                throw error
             }
-        } catch {
+        } onCancel: {
             sentenceSink.finish()
             ttsTask.cancel()
-            throw error
         }
     }
 
