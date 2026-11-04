@@ -77,6 +77,8 @@ final class VoiceSession {
     var languageVoice = StoredSetting.value("languageVoice", default: MultilingualVoices.defaultVoice) { didSet { StoredSetting.store(languageVoice, "languageVoice") } }
     var speed = StoredSetting.value("speed", default: 1.05) { didSet { StoredSetting.store(speed, "speed") } }
     var endOfTurnMs = StoredSetting.value("endOfTurnMs", default: 600) { didSet { StoredSetting.store(endOfTurnMs, "endOfTurnMs") } }
+    /// 0…1: how quiet you can be and still start a turn. See `speechGate`.
+    var micSensitivity = StoredSetting.value("micSensitivity", default: VoiceSession.defaultMicSensitivity) { didSet { StoredSetting.store(micSensitivity, "micSensitivity") } }
     var systemPrompt = StoredSetting.value("systemPrompt", default: VoiceSession.defaultPrompt) { didSet { StoredSetting.store(systemPrompt, "systemPrompt") } }
     /// Keep the chosen model pinned in oMLX so it's never unloaded (no 10 s+ reloads).
     /// Off by default: on a 24 GB Mac a pinned model can leave no room for any other.
@@ -131,14 +133,34 @@ final class VoiceSession {
         Use them only where they add feeling, usually not at all in a short plain answer, and never mention them.
         """
 
-    private var fullSystemPrompt: String {
-        var prompt = systemPrompt
-        if expressiveVoice { prompt += Self.expressivePrompt }
-        if useTools {
-            prompt += " You can search the web, read pages, check the time and open apps or web pages with your tools; use them whenever they help, and summarise results briefly in speech."
-        }
-        if matchLanguage { prompt += " Always reply in the same language the user speaks to you in." }
+    static let defaultMicSensitivity = 0.5
+
+    /// What it takes to start a turn at a given sensitivity: the chunk's loudness (on the
+    /// 0…1 scale of `AudioLevels.rms`) and Silero's speech probability. The default keeps
+    /// the probability at 0.5, as before, with a gate at about -43 dB under it; fully
+    /// sensitive drops the gate and accepts 0.35, least sensitive needs -34 dB and 0.65.
+    nonisolated static func speechGate(sensitivity: Double) -> (level: Float, probability: Float) {
+        let s = Float(min(1, max(0, sensitivity)))
+        return (level: 0.36 * (1 - s), probability: 0.65 - 0.3 * s)
+    }
+
+    static let toolsPrompt = " You can search the web, read pages, check the time and open apps or web pages with your tools; use them whenever they help, and summarise results briefly in speech."
+    static let matchLanguagePrompt = " Always reply in the same language the user speaks to you in."
+
+    /// What the model is sent: your personality, then the rules the app needs for the
+    /// settings that are on. An empty personality falls back to the default one.
+    static func composeSystemPrompt(_ personality: String, expressive: Bool, tools: Bool, matchLanguage: Bool) -> String {
+        let trimmed = personality.trimmingCharacters(in: .whitespacesAndNewlines)
+        var prompt = trimmed.isEmpty ? defaultPrompt : trimmed
+        if expressive { prompt += expressivePrompt }
+        if tools { prompt += toolsPrompt }
+        if matchLanguage { prompt += matchLanguagePrompt }
         return prompt
+    }
+
+    /// Read afresh for every request, so an edit in Settings applies to the next reply.
+    var fullSystemPrompt: String {
+        Self.composeSystemPrompt(systemPrompt, expressive: expressiveVoice, tools: useTools, matchLanguage: matchLanguage)
     }
 
     static let voices = [
@@ -806,8 +828,9 @@ final class VoiceSession {
                 guard let result = try? await vad.processStreamingChunk(chunk, state: vadState) else { continue }
                 vadState = result.state
                 let probability = result.probability
-                let (assistantBusy, endMs) = await MainActor.run { () -> (Bool, Int) in
-                    return (session?.assistantBusy ?? false, session?.endOfTurnMs ?? 600)
+                let (assistantBusy, endMs, sensitivity) = await MainActor.run { () -> (Bool, Int, Double) in
+                    return (session?.assistantBusy ?? false, session?.endOfTurnMs ?? 600,
+                            session?.micSensitivity ?? defaultMicSensitivity)
                 }
 
                 if !inSpeech {
@@ -815,7 +838,10 @@ final class VoiceSession {
                     if preRoll.count > 2 { preRoll.removeFirst() }
                     // While the assistant talks, require more evidence so echo residue can't interrupt it.
                     let needed = assistantBusy ? 2 : 1
-                    speechChunks = probability > (assistantBusy ? 0.7 : 0.5) ? speechChunks + 1 : 0
+                    let gate = speechGate(sensitivity: sensitivity)
+                    let level = chunk.withUnsafeBufferPointer { AudioLevels.rms($0) }
+                    let heard = probability > gate.probability + (assistantBusy ? 0.2 : 0) && level >= gate.level
+                    speechChunks = heard ? speechChunks + 1 : 0
                     if speechChunks >= needed {
                         inSpeech = true
                         silenceMs = 0

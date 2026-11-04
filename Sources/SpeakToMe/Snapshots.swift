@@ -135,6 +135,7 @@ enum Snapshots {
         let session = VoiceSession()
         session.models = [.init(id: "gemma-4-26b-a4b-it-4bit", sizeBytes: 16_108_266_064)]
         session.modelID = "gemma-4-26b-a4b-it-4bit"
+        session.levels.mic = 0.46 // the meter mid-word, past the default mark
         session.showEngineForSnapshot(.f5Russian, for: .russian, state: .ready)
         session.showF5VoiceForSnapshot(.init(id: "sample", name: "Recording 1", transcript: VoiceSession.f5VoiceScript))
         let panes = SettingsView.Pane.allCases

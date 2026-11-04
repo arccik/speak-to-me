@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// Settings as a sidebar of panes, in the style of System Settings.
@@ -14,7 +15,7 @@ struct SettingsView: View {
             case .shortcuts: return "Talk or bring up the face from any app"
             case .voice: return "Which model speaks each language, and how"
             case .cloning: return "Hear replies in a voice you record"
-            case .conversation: return "Turn-taking, personality and tools"
+            case .conversation: return "Turn-taking, system prompt and tools"
             case .model: return "The language model in oMLX"
             }
         }
@@ -189,13 +190,19 @@ private struct ShortcutsPane: View {
             } footer: {
                 Footer("Click a shortcut, then press the new keys. Esc cancels, Delete turns it off. Use at least one of ⌘, ⌥ or ⌃.")
             }
-            Section("In the Speak to Me window") {
+            Section {
                 KeyRow(keys: "Space", title: "Start or stop talking")
                 KeyRow(keys: "M", title: "Mute or unmute the mic")
                 KeyRow(keys: "Esc", title: "Stop the current reply")
+                KeyRow(keys: "C", title: "Show or hide the conversation")
+                KeyRow(keys: "T", title: "Type a message")
                 KeyRow(keys: "↩", title: "Send a typed message")
                 KeyRow(keys: "⌘N", title: "New conversation")
                 KeyRow(keys: "⌘,", title: "Settings")
+            } header: {
+                Text("In the Speak to Me window")
+            } footer: {
+                Footer("Single keys work while you're not typing in a text field.")
             }
         }
     }
@@ -680,12 +687,13 @@ private struct ConversationPane: View {
             } footer: {
                 Footer("Shorter feels snappier; longer gives you time to think mid-sentence.")
             }
+            MicSensitivitySection()
             Section {
                 Toggle("Let me interrupt replies without headphones", isOn: $session.echoCancellation)
             } footer: {
                 Footer("Cancels the assistant's voice from the mic so you can talk over it. It stays on while you talk back and forth, and macOS turns down other apps' sound while it runs. After 45 quiet seconds it lets go, and the next reply takes about 2 seconds longer to start. When off, the mic pauses while a reply plays. Takes effect the next time you start talking.")
             }
-            Section("Personality") {
+            Section {
                 HStack(spacing: 8) {
                     ForEach(Self.presets, id: \.name) { preset in
                         PresetChip(name: preset.name, icon: preset.icon,
@@ -693,13 +701,47 @@ private struct ConversationPane: View {
                             session.systemPrompt = preset.prompt
                         }
                     }
+                    if !Self.presets.contains(where: { $0.prompt == session.systemPrompt }) {
+                        Text("Custom").font(.callout).foregroundStyle(.secondary).padding(.leading, 4)
+                    }
                 }
                 TextEditor(text: $session.systemPrompt)
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .padding(6)
-                    .frame(minHeight: 110)
+                    .frame(minHeight: 140)
                     .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(alignment: .topLeading) {
+                        if session.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Describe who the assistant is and how it talks. Left empty, the default is used.")
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .accessibilityLabel("System prompt")
+                HStack {
+                    Button("Reset to Default") { session.systemPrompt = VoiceSession.defaultPrompt }
+                        .disabled(session.systemPrompt == VoiceSession.defaultPrompt)
+                    Spacer()
+                    Text("\(session.systemPrompt.count) characters")
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                DisclosureGroup("Full prompt sent to the model") {
+                    Text(session.fullSystemPrompt)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+            } header: {
+                Text("System prompt")
+            } footer: {
+                Footer("Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (below), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply.")
             }
             Section {
                 Toggle("Let it use tools", isOn: $session.useTools)
@@ -709,6 +751,127 @@ private struct ConversationPane: View {
                 Footer("Web search, the time, and opening apps or pages. Replies that need them take a few seconds longer.")
             }
         }
+    }
+}
+
+/// How quiet you can be and still start a turn, with a live meter to see where that falls.
+private struct MicSensitivitySection: View {
+    @Environment(VoiceSession.self) private var session
+    @State private var tester = MicTester()
+    @State private var testing = false
+    @State private var testError: String?
+
+    /// The conversation's own mic when it's on, otherwise the test one.
+    private var live: Bool { session.micOn || testing || Snapshots.isRendering }
+
+    var body: some View {
+        @Bindable var session = session
+        Section {
+            LabeledSlider(title: "Mic sensitivity", value: $session.micSensitivity, range: 0...1, step: 0.05,
+                          low: "Only clear, close speech", high: "Picks up quiet speech") { "\(Int(($0 * 100).rounded()))%" }
+            LabeledContent {
+                HStack(spacing: 8) {
+                    TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !live)) { _ in
+                        MicMeter(level: live ? (session.micOn || Snapshots.isRendering ? session.levels.mic : tester.levels.mic) : 0,
+                                 threshold: VoiceSession.speechGate(sensitivity: session.micSensitivity).level)
+                    }
+                    .frame(height: 10)
+                    if !session.micOn {
+                        Button(testing ? "Stop" : "Test Mic") { testing ? stopTest() : startTest() }
+                            .fixedSize()
+                    }
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Level")
+                    Text(testError ?? (live ? "Talk: the bar must pass the mark" : "Test to see your level"))
+                        .font(.caption)
+                        .foregroundStyle(testError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                }
+            }
+            Button("Reset to Default") { session.micSensitivity = VoiceSession.defaultMicSensitivity }
+                .disabled(abs(session.micSensitivity - VoiceSession.defaultMicSensitivity) < 0.001)
+        } header: {
+            Text("Microphone")
+        } footer: {
+            Footer("Turn it up if it misses you when you speak softly or sit far away. Turn it down if background noise, music or other people set it off. Applies straight away.")
+        }
+        .onChange(of: session.micOn) { if session.micOn { stopTest() } }
+        .onDisappear(perform: stopTest)
+    }
+
+    private func startTest() {
+        Task {
+            guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                testError = "Microphone access is off in System Settings"
+                return
+            }
+            do {
+                try tester.start()
+                testError = nil
+                testing = true
+            } catch {
+                testError = "Couldn't start the mic: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func stopTest() {
+        tester.stop()
+        testing = false
+    }
+}
+
+/// Loudness on the same 0…1 scale the turn-taking uses, with the start threshold marked.
+private struct MicMeter: View {
+    let level: Float
+    let threshold: Float
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule()
+                    .fill(level >= threshold ? Theme.accent : Color.secondary)
+                    .frame(width: max(0, width * CGFloat(min(1, level))))
+                Rectangle()
+                    .fill(Color.primary)
+                    .frame(width: 2, height: geo.size.height + 6)
+                    .offset(x: width * CGFloat(threshold) - 1)
+            }
+        }
+        .frame(minWidth: 160)
+        .accessibilityElement()
+        .accessibilityLabel("Mic level")
+        .accessibilityValue("\(Int(level * 100)) percent, starts listening at \(Int(threshold * 100))")
+    }
+}
+
+/// A second, bare listener for Settings while no conversation is running; it only
+/// measures loudness and never records.
+private final class MicTester: @unchecked Sendable {
+    let levels = AudioLevels()
+    private var engine: AVAudioEngine?
+
+    func start() throws {
+        guard engine == nil else { return }
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let levels = levels
+        input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
+            guard let data = buffer.floatChannelData?[0] else { return }
+            levels.mic = AudioLevels.rms(UnsafeBufferPointer(start: data, count: Int(buffer.frameLength)))
+        }
+        try engine.start()
+        self.engine = engine
+    }
+
+    func stop() {
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
+        engine = nil
+        levels.mic = 0
     }
 }
 
@@ -741,13 +904,20 @@ private struct ModelPane: View {
         @Bindable var session = session
         Form {
             Section {
-                Picker("Model", selection: Binding(get: { session.modelID }, set: {
-                    session.modelID = $0
-                    session.modelChanged()
-                })) {
-                    ForEach(session.models) { model in
-                        Text("\(model.id)  ·  \(String(format: "%.1f GB", Double(model.sizeBytes) / 1_073_741_824))")
-                            .tag(model.id)
+                if session.models.isEmpty {
+                    LabeledContent("Model") {
+                        Label("No chat models found in oMLX", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                } else {
+                    Picker("Model", selection: Binding(get: { session.modelID }, set: {
+                        session.modelID = $0
+                        session.modelChanged()
+                    })) {
+                        ForEach(session.models) { model in
+                            Text("\(model.id)  ·  \(String(format: "%.1f GB", Double(model.sizeBytes) / 1_073_741_824))")
+                                .tag(model.id)
+                        }
                     }
                 }
                 LabeledContent("Server", value: session.serverAddress)

@@ -246,6 +246,12 @@ private struct HistoryButton: View {
                             .padding(.vertical, 4)
                         }
                         .frame(maxHeight: 360)
+                        Divider()
+                        Text("Right-click a conversation to delete it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
                     }
                 }
                 .frame(width: 320)
@@ -261,6 +267,10 @@ private struct ModelMenu: View {
             if let ms = session.lastLatencyMs {
                 Text("Last reply started in \(ms) ms")
                 Divider()
+            }
+            if session.models.isEmpty {
+                Text("No chat models in oMLX yet")
+                Text("Download one in oMLX, then reopen this menu")
             }
             ForEach(session.models) { model in
                 Button {
@@ -788,16 +798,18 @@ private struct ComposerToggle: View {
     }
 }
 
-/// Space toggles the mic, M mutes it, C shows or hides the chat and Esc stops a reply,
-/// except while you're typing in a text field.
+/// Space toggles the mic, M mutes it, C shows or hides the chat, T starts typing and Esc
+/// stops a reply, except while you're typing in a text field.
 @MainActor
 enum SpaceKey {
     private static var monitor: Any?
+    /// Posted for T; the dock opens its text field.
+    static let startTyping = Notification.Name("SpeakToMe.startTyping")
 
     static func install() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard [49, 46, 8, 53].contains(event.keyCode),
+            guard [49, 46, 8, 17, 53].contains(event.keyCode),
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock).isEmpty,
                   !(event.window?.firstResponder is NSText),
                   event.window?.identifier?.rawValue.hasPrefix("main") == true
@@ -814,6 +826,7 @@ enum SpaceKey {
             case 8:
                 guard !session.lines.isEmpty else { return event }
                 UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: "chatOpen"), forKey: "chatOpen")
+            case 17: NotificationCenter.default.post(name: startTyping, object: nil)
             default: guard session.isReplying else { return event }; session.stopReply()
             }
             return nil
@@ -849,6 +862,7 @@ private struct Dock: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.18), value: typing)
         .animation(.easeOut(duration: 0.2), value: hint)
+        .onReceive(NotificationCenter.default.publisher(for: SpaceKey.startTyping)) { _ in startTyping() }
         .onChange(of: focused) { _, isFocused in
             // Clicking away from an empty field goes back to voice.
             if !isFocused && !hasDraft { typing = false }
@@ -857,7 +871,7 @@ private struct Dock: View {
 
     private var actions: some View {
         HStack(spacing: 26) {
-            TextAction(text: "Type", systemImage: "keyboard", help: "Type instead") { startTyping() }
+            TextAction(text: "Type", systemImage: "keyboard", help: "Type instead (T)") { startTyping() }
             if !chatOpen, !session.lines.isEmpty {
                 TextAction(text: "Conversation \u{00B7} \(session.lines.count)", help: "Show the whole conversation (C)") { chatOpen = true }
             }

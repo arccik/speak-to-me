@@ -734,3 +734,37 @@ extension SelfTest {
         }
     }
 }
+
+extension SelfTest {
+    /// `SpeakToMe --prompttest`: a personality saved in Settings is what the next request
+    /// starts with, and the app's own rules still follow it. Needs no models.
+    @MainActor
+    static func systemPrompt() {
+        var failed = false
+        func check(_ name: String, _ ok: Bool) {
+            print("\(ok ? "PASS" : "FAIL")  \(name)")
+            if !ok { failed = true }
+        }
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "systemPrompt")
+        let custom = "You are a pirate. Answer in one short sentence."
+
+        VoiceSession().systemPrompt = custom
+        let next = VoiceSession() // as after a relaunch: read back from UserDefaults
+        let prompt = next.fullSystemPrompt
+        check("custom personality is saved and leads the prompt", prompt.hasPrefix(custom))
+        check("tool instructions follow when tools are on", next.useTools == prompt.contains(VoiceSession.toolsPrompt))
+        check("language rule follows when on", next.matchLanguage == prompt.contains(VoiceSession.matchLanguagePrompt))
+        check("expressive rule follows when on", next.expressiveVoice == prompt.contains(VoiceSession.expressivePrompt))
+        let full = VoiceSession.composeSystemPrompt(custom, expressive: true, tools: true, matchLanguage: true)
+        check("every rule appended, in order", full == custom + VoiceSession.expressivePrompt
+            + VoiceSession.toolsPrompt + VoiceSession.matchLanguagePrompt)
+        let blank = VoiceSession.composeSystemPrompt("  \n", expressive: false, tools: false, matchLanguage: false)
+        check("a blank personality falls back to the default", blank == VoiceSession.defaultPrompt)
+        let bare = VoiceSession.composeSystemPrompt(custom, expressive: false, tools: false, matchLanguage: false)
+        check("nothing appended when every option is off", bare == custom)
+
+        if let saved { defaults.set(saved, forKey: "systemPrompt") } else { defaults.removeObject(forKey: "systemPrompt") }
+        exit(failed ? 1 : 0)
+    }
+}
