@@ -508,8 +508,16 @@ final class FaceRenderer {
     /// The two chevrons cut into the plate, along the slanted edges in the film: the upper one runs
     /// from the tip of the nose down the jaw plates and marks off the middle piece, the lower one
     /// starts under the upper lip and marks off the piece at the centre of the chin.
-    static float upperChevron(float x) { return 86 + 1.15 * abs(x); }
-    static float lowerChevron(float x) { return 118 + 1.5 * abs(x); }
+    /// Like the top edge, each has a rounded peak and sides that ease off as they fall.
+    static float upperChevron(float x) {
+        float a = sqrt(x * x + 64) - 8;
+        return 86 + 1.35 * a - 0.004 * a * a;
+    }
+
+    static float lowerChevron(float x) {
+        float a = sqrt(x * x + 36) - 6;
+        return 118 + 1.75 * a - 0.006 * a * a;
+    }
     static float below(float2 q, float line) { return smoothstep(-1.2, 1.2, q.y - line); }
 
     /// Looking into a gap between two pieces: the underside of the edge above, in shadow, then a
