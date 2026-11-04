@@ -141,10 +141,58 @@ final class VoiceSession {
     /// 0…1 scale of `AudioLevels.rms`) and Silero's speech probability. The default keeps
     /// the probability at 0.5, as before, with a gate at about -43 dB under it; fully
     /// sensitive drops the gate and accepts 0.35, least sensitive needs -34 dB and 0.65.
+    /// The part of the conversation the model sees. Small models copy their own earlier
+    /// replies, and once one has been repeated every new reply copies it again, so replies
+    /// that repeat another are left out (every copy, the first too), as are empty ones
+    /// from replies cut off before they said anything. Your messages are all kept.
+    nonisolated static func modelContext(_ history: [OMLXClient.Message], limit: Int = 20) -> [OMLXClient.Message] {
+        let replies = history.enumerated().filter { $0.element.role == "assistant" }
+        var dropped = Set<Int>()
+        for (i, reply) in replies {
+            if reply.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { dropped.insert(i); continue }
+            for (j, other) in replies where j > i && !dropped.contains(j) && isRepeat(reply.content, other.content) {
+                dropped.insert(i)
+                dropped.insert(j)
+            }
+        }
+        let kept = history.enumerated().filter { !dropped.contains($0.offset) }.map(\.element)
+        return Array(kept.suffix(limit))
+    }
+
+    /// Two replies say much the same thing: most of their opening words are shared, or
+    /// they have a sentence of six words or more in common (small models reshuffle the
+    /// greeting but keep the canned sentence after it).
+    nonisolated static func isRepeat(_ a: String, _ b: String) -> Bool {
+        func words(_ text: Substring) -> [String] {
+            text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
+        func overlap(_ x: [String], _ y: [String], minimum: Int, needed: Double) -> Bool {
+            let x = Set(x), y = Set(y)
+            guard x.count >= minimum, y.count >= minimum else { return false }
+            return Double(x.intersection(y).count) / Double(min(x.count, y.count)) >= needed
+        }
+        if overlap(Array(words(Substring(a)).prefix(30)), Array(words(Substring(b)).prefix(30)), minimum: 6, needed: 0.7) {
+            return true
+        }
+        func sentences(_ text: String) -> [[String]] {
+            text.split(whereSeparator: { ".!?…\n".contains($0) }).map(words).filter { $0.count >= 6 }
+        }
+        let other = sentences(b)
+        return sentences(a).contains { s in other.contains { overlap(s, $0, minimum: 6, needed: 0.8) } }
+    }
+
     nonisolated static func speechGate(sensitivity: Double) -> (level: Float, probability: Float) {
         let s = Float(min(1, max(0, sensitivity)))
         return (level: 0.36 * (1 - s), probability: 0.65 - 0.3 * s)
     }
+
+    /// Older conversations stay in the history list, but launching starts a new one.
+    static let resumeWithin: TimeInterval = 30 * 60
+
+    /// Always added, so even a one-line personality ("you are a mad scientist") speaks
+    /// well and doesn't fall into repeating itself.
+    static let conversationPrompt = " Reply to what the user just said. Never repeat or paraphrase one of your earlier replies, and don't greet the user again or introduce yourself unless asked."
+    static let spokenPrompt = " Never use markdown, lists, headings, code blocks or emoji: everything you write is read aloud."
 
     static let toolsPrompt = " You can search the web, read pages, check the time and open apps or web pages with your tools; use them whenever they help, and summarise results briefly in speech."
     static let matchLanguagePrompt = " Always reply in the same language the user speaks to you in."
@@ -156,6 +204,8 @@ final class VoiceSession {
         let trimmed = personality.trimmingCharacters(in: .whitespacesAndNewlines)
         var prompt = trimmed.isEmpty ? defaultPrompt : trimmed
         guard addsRules else { return prompt }
+        if !prompt.localizedCaseInsensitiveContains("markdown") { prompt += spokenPrompt }
+        prompt += conversationPrompt
         if expressive { prompt += expressivePrompt }
         if tools { prompt += toolsPrompt }
         if matchLanguage { prompt += matchLanguagePrompt }
@@ -176,7 +226,7 @@ final class VoiceSession {
             systemPrompt = fullSystemPrompt
         } else {
             var text = systemPrompt
-            for rule in [Self.expressivePrompt, Self.toolsPrompt, Self.matchLanguagePrompt] {
+            for rule in [Self.spokenPrompt, Self.conversationPrompt, Self.expressivePrompt, Self.toolsPrompt, Self.matchLanguagePrompt] {
                 text = text.replacingOccurrences(of: rule, with: "")
             }
             systemPrompt = text
@@ -237,7 +287,10 @@ final class VoiceSession {
 
     func boot() async {
         savedConversations = store.list()
-        if let latest = savedConversations.first { openConversation(latest.id) }
+        // Pick up where you left off, but not a conversation from hours ago.
+        if let latest = savedConversations.first, Date().timeIntervalSince(latest.updated) < Self.resumeWithin {
+            openConversation(latest.id)
+        }
         await connect()
     }
 
@@ -1024,7 +1077,7 @@ final class VoiceSession {
                 images = [try await ScreenVision.capture()]
                 turn.sharedScreen = true
             }
-            let messages = [OMLXClient.Message(role: "system", content: fullSystemPrompt)] + history.suffix(20)
+            let messages = [OMLXClient.Message(role: "system", content: fullSystemPrompt)] + Self.modelContext(history)
                 + [.init(role: "user", content: text, images: images)]
             if turn.committed { reveal(turn) }
             try await generate(turn, messages: messages, speech: speech)

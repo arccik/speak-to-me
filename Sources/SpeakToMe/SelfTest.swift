@@ -757,12 +757,14 @@ extension SelfTest {
         check("language rule follows when on", next.matchLanguage == prompt.contains(VoiceSession.matchLanguagePrompt))
         check("expressive rule follows when on", next.expressiveVoice == prompt.contains(VoiceSession.expressivePrompt))
         let full = VoiceSession.composeSystemPrompt(custom, expressive: true, tools: true, matchLanguage: true)
-        check("every rule appended, in order", full == custom + VoiceSession.expressivePrompt
+        let always = VoiceSession.spokenPrompt + VoiceSession.conversationPrompt
+        check("every rule appended, in order", full == custom + always + VoiceSession.expressivePrompt
             + VoiceSession.toolsPrompt + VoiceSession.matchLanguagePrompt)
         let blank = VoiceSession.composeSystemPrompt("  \n", expressive: false, tools: false, matchLanguage: false)
-        check("a blank personality falls back to the default", blank == VoiceSession.defaultPrompt)
+        check("a blank personality falls back to the default, without doubling its no-markdown rule",
+              blank == VoiceSession.defaultPrompt + VoiceSession.conversationPrompt)
         let bare = VoiceSession.composeSystemPrompt(custom, expressive: false, tools: false, matchLanguage: false)
-        check("nothing appended when every option is off", bare == custom)
+        check("only the speaking rules when every option is off", bare == custom + always)
 
         let whole = VoiceSession.composeSystemPrompt(custom, expressive: true, tools: true, matchLanguage: true, addsRules: false)
         check("a whole prompt is sent exactly as written", whole == custom)
@@ -777,6 +779,28 @@ extension SelfTest {
         check("writing the whole prompt keeps what was sent", switching.fullSystemPrompt == before && switching.systemPrompt == before)
         switching.setWritesWholePrompt(false)
         check("switching back leaves no doubled rules", switching.systemPrompt == custom && switching.fullSystemPrompt == before)
+
+        // The loop from a real conversation: the same canned reply, again and again.
+        typealias M = OMLXClient.Message
+        let canned = "Привет! Похоже, мы немного потеряли нить разговора. Давай начнём заново! Я — голосовой ассистент, который помогает с информацией."
+        let looped: [M] = [
+            M(role: "user", content: "Расскажи про Марс"),
+            M(role: "assistant", content: "Марс — четвёртая планета от Солнца, её называют красной из-за оксида железа."),
+            M(role: "user", content: "Так, что ты там говорил?"),
+            M(role: "assistant", content: canned),
+            M(role: "user", content: "Будешь мандарины?"),
+            M(role: "assistant", content: ""),
+            M(role: "user", content: "Ну что, мандарин?"),
+            M(role: "assistant", content: canned.replacingOccurrences(of: "начнём заново", with: "начнём с чистого листа")),
+        ]
+        let context = VoiceSession.modelContext(looped)
+        check("repeated replies are left out, every copy", !context.contains { $0.content.contains("потеряли нить") })
+        check("empty cut-off replies are left out", !context.contains { $0.role == "assistant" && $0.content.isEmpty })
+        check("every user message and the real answer are kept",
+              context.filter { $0.role == "user" }.count == 4 && context.contains { $0.content.hasPrefix("Марс") })
+        check("different replies aren't mistaken for repeats", !VoiceSession.isRepeat(
+            "Марс — четвёртая планета от Солнца, её называют красной из-за оксида железа.",
+            "Мандарины полезны: в них много витамина C, и зимой они особенно вкусные."))
 
         if let savedRules { defaults.set(savedRules, forKey: "addsPromptRules") } else { defaults.removeObject(forKey: "addsPromptRules") }
         if let saved { defaults.set(saved, forKey: "systemPrompt") } else { defaults.removeObject(forKey: "systemPrompt") }
