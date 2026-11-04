@@ -722,26 +722,43 @@ private struct ConversationPane: View {
                     }
                     .accessibilityLabel("System prompt")
                 HStack {
-                    Button("Reset to Default") { session.systemPrompt = VoiceSession.defaultPrompt }
-                        .disabled(session.systemPrompt == VoiceSession.defaultPrompt)
+                    Button("Reset to Default") {
+                        session.setWritesWholePrompt(false)
+                        session.systemPrompt = VoiceSession.defaultPrompt
+                    }
+                    .disabled(session.systemPrompt == VoiceSession.defaultPrompt && session.addsPromptRules)
                     Spacer()
                     Text("\(session.systemPrompt.count) characters")
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
-                DisclosureGroup("Full prompt sent to the model") {
-                    Text(session.fullSystemPrompt)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
+                Toggle(isOn: Binding(get: { !session.addsPromptRules }, set: { session.setWritesWholePrompt($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Write the whole prompt myself")
+                        Text(session.addsPromptRules
+                             ? "The app adds its rules for tools, language and expressive voice after your text"
+                             : "Sent exactly as written. Tools stay available, but nothing tells the model to use them")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if session.addsPromptRules {
+                    DisclosureGroup("Full prompt sent to the model") {
+                        Text(session.fullSystemPrompt)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+                    }
                 }
             } header: {
                 Text("System prompt")
             } footer: {
-                Footer("Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (below), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply.")
+                Footer(session.addsPromptRules
+                    ? "Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (below), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply."
+                    : "The text above is the entire system prompt. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply; start a new conversation (⌘N) if replies keep echoing the old style.")
             }
             Section {
                 Toggle("Let it use tools", isOn: $session.useTools)

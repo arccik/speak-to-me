@@ -764,6 +764,21 @@ extension SelfTest {
         let bare = VoiceSession.composeSystemPrompt(custom, expressive: false, tools: false, matchLanguage: false)
         check("nothing appended when every option is off", bare == custom)
 
+        let whole = VoiceSession.composeSystemPrompt(custom, expressive: true, tools: true, matchLanguage: true, addsRules: false)
+        check("a whole prompt is sent exactly as written", whole == custom)
+
+        // Switching to writing it all carries the rules into the text; switching back takes them out again.
+        let savedRules = defaults.object(forKey: "addsPromptRules")
+        let switching = VoiceSession()
+        switching.addsPromptRules = true
+        switching.systemPrompt = custom
+        let before = switching.fullSystemPrompt
+        switching.setWritesWholePrompt(true)
+        check("writing the whole prompt keeps what was sent", switching.fullSystemPrompt == before && switching.systemPrompt == before)
+        switching.setWritesWholePrompt(false)
+        check("switching back leaves no doubled rules", switching.systemPrompt == custom && switching.fullSystemPrompt == before)
+
+        if let savedRules { defaults.set(savedRules, forKey: "addsPromptRules") } else { defaults.removeObject(forKey: "addsPromptRules") }
         if let saved { defaults.set(saved, forKey: "systemPrompt") } else { defaults.removeObject(forKey: "systemPrompt") }
         exit(failed ? 1 : 0)
     }

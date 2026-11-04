@@ -80,6 +80,8 @@ final class VoiceSession {
     /// 0…1: how quiet you can be and still start a turn. See `speechGate`.
     var micSensitivity = StoredSetting.value("micSensitivity", default: VoiceSession.defaultMicSensitivity) { didSet { StoredSetting.store(micSensitivity, "micSensitivity") } }
     var systemPrompt = StoredSetting.value("systemPrompt", default: VoiceSession.defaultPrompt) { didSet { StoredSetting.store(systemPrompt, "systemPrompt") } }
+    /// Off, `systemPrompt` is sent exactly as written, with none of the app's rules added.
+    var addsPromptRules = StoredSetting.value("addsPromptRules", default: true) { didSet { StoredSetting.store(addsPromptRules, "addsPromptRules") } }
     /// Keep the chosen model pinned in oMLX so it's never unloaded (no 10 s+ reloads).
     /// Off by default: on a 24 GB Mac a pinned model can leave no room for any other.
     var keepModelLoaded = StoredSetting.value("keepModelLoaded", default: false) { didSet { StoredSetting.store(keepModelLoaded, "keepModelLoaded") } }
@@ -149,9 +151,11 @@ final class VoiceSession {
 
     /// What the model is sent: your personality, then the rules the app needs for the
     /// settings that are on. An empty personality falls back to the default one.
-    static func composeSystemPrompt(_ personality: String, expressive: Bool, tools: Bool, matchLanguage: Bool) -> String {
+    static func composeSystemPrompt(_ personality: String, expressive: Bool, tools: Bool, matchLanguage: Bool,
+                                    addsRules: Bool = true) -> String {
         let trimmed = personality.trimmingCharacters(in: .whitespacesAndNewlines)
         var prompt = trimmed.isEmpty ? defaultPrompt : trimmed
+        guard addsRules else { return prompt }
         if expressive { prompt += expressivePrompt }
         if tools { prompt += toolsPrompt }
         if matchLanguage { prompt += matchLanguagePrompt }
@@ -160,7 +164,24 @@ final class VoiceSession {
 
     /// Read afresh for every request, so an edit in Settings applies to the next reply.
     var fullSystemPrompt: String {
-        Self.composeSystemPrompt(systemPrompt, expressive: expressiveVoice, tools: useTools, matchLanguage: matchLanguage)
+        Self.composeSystemPrompt(systemPrompt, expressive: expressiveVoice, tools: useTools, matchLanguage: matchLanguage,
+                                 addsRules: addsPromptRules)
+    }
+
+    /// Switches between writing the whole prompt and letting the app add its rules,
+    /// carrying the text over so nothing is lost or doubled.
+    func setWritesWholePrompt(_ whole: Bool) {
+        guard whole == addsPromptRules else { return }
+        if whole {
+            systemPrompt = fullSystemPrompt
+        } else {
+            var text = systemPrompt
+            for rule in [Self.expressivePrompt, Self.toolsPrompt, Self.matchLanguagePrompt] {
+                text = text.replacingOccurrences(of: rule, with: "")
+            }
+            systemPrompt = text
+        }
+        addsPromptRules = !whole
     }
 
     static let voices = [
