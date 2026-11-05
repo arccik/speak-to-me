@@ -59,7 +59,7 @@ struct ToolsPane: View {
             } header: {
                 Text("MCP servers")
             } footer: {
-                Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
+                Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. A tool that can change things asks you in the main window before it runs, and one that may delete or overwrite things asks every time. Only add servers you trust: a program you add here runs with your permissions. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
             }
 
             Section {
@@ -126,6 +126,34 @@ private struct ToolSwitch: View {
     }
 }
 
+/// Under each MCP tool: whether it runs on its own or waits for your OK.
+private struct PermissionLine: View {
+    let serverID: String
+    let tool: MCP.Tool
+    private let hub = ToolHub.shared
+
+    var body: some View {
+        switch hub.permission(server: serverID, tool: tool) {
+        case .readOnly:
+            note("Only reads, so it runs without asking", "eye")
+        case .alwaysAsks:
+            note("May delete or overwrite things, so it asks every time", "exclamationmark.shield")
+        case .asks(let trusted):
+            Toggle(isOn: Binding(get: { !trusted }, set: { hub.setTrusted(server: serverID, tool: tool.name, trusted: !$0) })) {
+                Label("Ask before it changes anything", systemImage: "hand.raised")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .controlSize(.mini)
+            .padding(.leading, 12)
+        }
+    }
+
+    private func note(_ text: String, _ icon: String) -> some View {
+        Label(text, systemImage: icon).font(.caption).foregroundStyle(.secondary).padding(.leading, 12)
+    }
+}
+
 private struct ServerRow: View {
     let server: ToolHub.Server
     var onRemove: (() -> Void)?
@@ -167,6 +195,7 @@ private struct ServerRow: View {
                     ForEach(server.tools) { tool in
                         ToolSwitch(serverID: server.id, tool: tool.name, title: tool.title ?? tool.name,
                                    detail: tool.description)
+                        PermissionLine(serverID: server.id, tool: tool)
                     }
                 } label: {
                     Text("\(server.tools.count) \(server.tools.count == 1 ? "tool" : "tools")")
@@ -220,6 +249,12 @@ private struct PluginRow: View {
                     if !plugin.description.isEmpty {
                         Text(plugin.description).font(.caption).foregroundStyle(.secondary)
                     }
+                    if hub.pluginChanged(plugin) {
+                        Label("Its files changed since you switched it on, so it's off until you check it and switch it on again.",
+                              systemImage: "exclamationmark.shield.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                     if let problem = plugin.problem {
                         Label(problem, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
@@ -228,6 +263,7 @@ private struct PluginRow: View {
                 }
                 Spacer()
                 Toggle("", isOn: Binding(get: { hub.isPluginOn(plugin) }, set: { hub.setPlugin(plugin, on: $0) }))
+                    .disabled(plugin.problem != nil)
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.small)

@@ -140,9 +140,19 @@ Commands are found through your login shell's `PATH`, so `npx`, `uvx` and Homebr
 
 `instructions` are added to the system prompt while the plugin is on. An `instructions.md` file next to `plugin.json` works too. `speech` sets what's shown under the reply and said while a slow tool runs. `${PLUGIN_DIR}` is the plugin's folder. Plugins can run programs, so each one stays off until you switch it on.
 
+**Safety.**
+
+- **Built-in tools can't change your files.** They can only search, read web pages, tell the time, and open apps or http(s) links.
+- **MCP tools that change things ask first.** Before such a tool runs, a card in the window shows exactly what it will do, and it waits for **Allow**. Talking over it, or no answer in 2 minutes, counts as no.
+- **Tools that may delete or overwrite ask every time.** MCP treats every tool this way unless its server says otherwise, and this can't be switched off.
+- **Only tools whose own server says they only read run without asking.**
+- **Plugins stay off until you switch them on.** A plugin turns itself off again if its files change.
+- **Programs you add get only a minimal environment.** Remote servers must use https unless they're on this Mac.
+- **Only add servers you trust.** A program you add runs with your permissions.
+
 **Good to know:**
 
-- **Drafts.** Replies are drafted before you finish talking, and a draft may be thrown away. So a tool only runs in a draft if its server or plugin marks it read-only. Every other tool waits until the reply is real.
+- **Drafts.** Replies are drafted before you finish talking, and a draft may be thrown away. So a tool only runs in a draft if its server or plugin marks it read-only. Every other tool waits until the reply is real. A plugin's `readOnly` only affects drafts. It never skips asking you.
 - **How many tools.** Small local models pick the wrong tool more often when they have many to choose from, and every tool makes replies a little slower to start. Settings warns you past 20.
 - **Checking your setup.** `SpeakToMe --mcplist` starts your servers and prints their tools, or why each one failed.
 

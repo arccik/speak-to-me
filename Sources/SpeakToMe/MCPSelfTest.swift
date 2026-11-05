@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Network
 
@@ -49,6 +50,9 @@ enum MCPSelfTest {
                  "inputSchema": object(["a": ["type": "number"], "b": ["type": "number"]])],
                 ["name": "fail", "description": "Always fails.", "inputSchema": object([:])],
                 ["name": "where", "description": "The WHERE variable.", "inputSchema": object([:])],
+                ["name": "note", "description": "Adds a note.", "annotations": ["destructiveHint": false],
+                 "inputSchema": object(["text": ["type": "string"]])],
+                ["name": "secret", "description": "The app's secret variable, if passed on.", "inputSchema": object([:])],
                 ["name": "quit", "description": "Stops the server.", "inputSchema": object([:])],
             ]]
         case "tools/call":
@@ -63,6 +67,8 @@ enum MCPSelfTest {
                 result = text("\(sum)")
             case "fail": result = text("it broke", error: true)
             case "where": result = text(ProcessInfo.processInfo.environment["WHERE"] ?? "unset")
+            case "note": result = text("noted")
+            case "secret": result = text(ProcessInfo.processInfo.environment["SPEAKTOME_TEST_SECRET"] ?? "unset")
             default:
                 return ["jsonrpc": "2.0", "id": id, "error": ["code": -32602, "message": "No such tool"]]
             }
@@ -212,6 +218,7 @@ enum MCPSelfTest {
             "remote": ["url": "http://127.0.0.1:\(port)/mcp"],
             "broken": ["command": "speaktome-no-such-program"],
             "sleeping": ["command": me, "args": ["--mcp-test-server"], "disabled": true],
+            "plain": ["url": "http://example.com/mcp"],
         ]]
         try! JSONSerialization.data(withJSONObject: config).write(to: root.appendingPathComponent("mcp.json"))
         let manifest: [String: Any] = [
@@ -222,6 +229,7 @@ enum MCPSelfTest {
         ]
         try! JSONSerialization.data(withJSONObject: manifest).write(to: pluginDir.appendingPathComponent("plugin.json"))
 
+        setenv("SPEAKTOME_TEST_SECRET", "leaked", 1)
         let hub = ToolHub(root: root, defaults: defaults)
         hub.startOnce()
         func server(_ name: String) -> ToolHub.Server? { hub.servers.first { $0.name == name } }
@@ -233,14 +241,18 @@ enum MCPSelfTest {
             server("local")?.status == .running && server("remote")?.status == .running
                 && { if case .failed = server("broken")?.status { return true }; return false }()
         }
-        check("local server starts and lists its tools", server("local")?.tools.count == 5, "\(String(describing: server("local")?.status))")
-        check("remote server starts and lists its tools (event stream)", server("remote")?.tools.count == 5,
+        check("local server starts and lists its tools", server("local")?.tools.count == 7, "\(String(describing: server("local")?.status))")
+        check("remote server starts and lists its tools (event stream)", server("remote")?.tools.count == 7,
               "\(String(describing: server("remote")?.status))")
         check("a missing program is reported", {
             if case .failed(let message) = server("broken")?.status { return message.contains("Couldn't find") }
             return false
         }(), "\(String(describing: server("broken")?.status))")
         check("\"disabled\": true keeps a server off", server("sleeping")?.status == .off)
+        check("plain http to another computer is refused", {
+            if case .failed(let message) = server("plain")?.status { return message.contains("https") }
+            return false
+        }(), "\(String(describing: server("plain")?.status))")
         check("plugins start off", server("demo")?.status == .off && !names().contains("demo__echo"))
         check("built-in tools come first", names().first == "web_search")
         check("tools are named server__tool", names().contains("local__echo") && names().contains("remote__add"), "\(names())")
@@ -252,6 +264,15 @@ enum MCPSelfTest {
         check("read-only tools may run in drafts", !hub.hasSideEffects(call("local__echo")))
         check("other tools wait for the real reply", hub.hasSideEffects(call("local__add")))
         check("built-in side effects are unchanged", hub.hasSideEffects(call("open_app")) && !hub.hasSideEffects(call("get_time")))
+        check("read-only tools run without asking", !hub.needsApproval(call("local__echo")))
+        check("tools that may delete ask (MCP's default)", hub.needsApproval(call("local__add")))
+        check("tools that change things ask", hub.needsApproval(call("local__note")))
+        hub.setTrusted(server: "mcp:local", tool: "note", trusted: true)
+        hub.setTrusted(server: "mcp:local", tool: "add", trusted: true)
+        check("you can let a non-deleting tool run without asking", !hub.needsApproval(call("local__note")))
+        check("a tool that may delete asks however it's set", hub.needsApproval(call("local__add")))
+        check("built-in tools never ask", !hub.needsApproval(call("open_url")) && !hub.needsApproval(call("web_search")))
+        check("the app's environment isn't passed on", await hub.run(call("local__secret"), client: client) == "unset")
         check("labels use the tool's title", hub.label(for: call("local__add")) == "Used Add numbers (local)",
               hub.label(for: call("local__add")))
 
@@ -270,7 +291,8 @@ enum MCPSelfTest {
         check("plugin instructions join the prompt", hub.instructions == "Use the demo tools for demos.")
         check("plugin labels and fillers are spoken", hub.label(for: call("demo__echo")) == "Echoed it"
               && hub.filler(for: call("demo__echo")) == "One moment.")
-        check("a plugin can mark a tool read-only", !hub.hasSideEffects(call("demo__add")))
+        check("a plugin can mark a tool read-only for drafts", !hub.hasSideEffects(call("demo__add")))
+        check("but can't skip asking", hub.needsApproval(call("demo__add")))
         let whereResult = await hub.run(call("demo__where"), client: client)
         check("${PLUGIN_DIR} is filled in", whereResult == pluginDir.path, whereResult)
 
@@ -293,10 +315,46 @@ enum MCPSelfTest {
         if let added = server("added") { try? hub.removeServer(added) }
         check("Remove takes it out", server("added") == nil)
         let saved = (try? JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("mcp.json")))) as? [String: Any]
-        check("mcp.json keeps the other servers", ((saved?["mcpServers"] as? [String: Any])?.keys.count ?? 0) == 4)
+        check("mcp.json keeps the other servers", ((saved?["mcpServers"] as? [String: Any])?.keys.count ?? 0) == 5)
+        let mode = (try? FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("mcp.json").path))?[.posixPermissions] as? Int
+        check("mcp.json is readable by you only", mode == 0o600, "\(String(describing: mode))")
+
+        var changed = manifest
+        changed["mcpServers"] = ["demo": ["command": "/bin/rm", "args": ["-rf", "/tmp/speaktome-never"]]]
+        try? JSONSerialization.data(withJSONObject: changed).write(to: pluginDir.appendingPathComponent("plugin.json"))
+        hub.reload()
+        let edited = hub.plugins.first { $0.id == "demo" }
+        check("a plugin whose files changed goes off", edited.map { !hub.isPluginOn($0) && hub.pluginChanged($0) } ?? false)
+        check("and its servers don't start", server("demo")?.status == .off)
 
         check("command lines split like a shell", ShellPath.words(#"npx -y "a b" c\ d 'e "f"'"#) == ["npx", "-y", "a b", "c d", #"e "f""#])
         check("long names fit the 64-character limit", ToolHub.qualifiedName(String(repeating: "s", count: 40), String(repeating: "t", count: 40)).count == 64)
+
+        // The approval card: yes, no, talking over it (the turn is cancelled), and a newer one.
+        _ = NSApplication.shared
+        let session = VoiceSession()
+        func ask() -> Task<Bool, Never> { Task { await session.askApproval(for: call("x__delete")) } }
+        var asking = ask()
+        await waitFor("card", seconds: 3) { session.approval != nil }
+        session.answerApproval(true)
+        check("Allow lets it run", await asking.value && session.approval == nil)
+        asking = ask()
+        await waitFor("card", seconds: 3) { session.approval != nil }
+        session.answerApproval(false)
+        check("Don't Allow stops it", !(await asking.value))
+        asking = ask()
+        await waitFor("card", seconds: 3) { session.approval != nil }
+        asking.cancel()
+        let cancelled = await asking.value
+        check("talking over it counts as no", !cancelled && session.approval == nil)
+        let first = ask()
+        await waitFor("card", seconds: 3) { session.approval != nil }
+        let firstCard = session.approval?.id
+        asking = ask()
+        await waitFor("second card", seconds: 3) { session.approval != nil && session.approval?.id != firstCard }
+        check("a newer request says no to the older one", !(await first.value) && session.approval != nil)
+        session.answerApproval(false)
+        _ = await asking.value
 
         hub.reload()
         ChildProcesses.terminateAll()

@@ -16,7 +16,13 @@ enum MCP {
         let schema: Data
         /// The server says calling it changes nothing, so a draft reply may call it.
         let readOnly: Bool
+        /// It may delete or overwrite things. MCP assumes so unless the server says otherwise,
+        /// and such tools always need your OK.
+        let destructive: Bool
     }
+
+    /// The most a server may send in one message; more is refused rather than kept in memory.
+    static let messageLimit = 8 * 1024 * 1024
 
     enum Failure: LocalizedError {
         case notFound(String)
@@ -89,7 +95,9 @@ enum MCP {
                         title: (entry["title"] ?? annotations["title"]) as? String,
                         description: entry["description"] as? String ?? "",
                         schema: (try? JSONSerialization.data(withJSONObject: schema)) ?? Data("{}".utf8),
-                        readOnly: annotations["readOnlyHint"] as? Bool ?? false))
+                        readOnly: annotations["readOnlyHint"] as? Bool ?? false,
+                        destructive: !(annotations["readOnlyHint"] as? Bool ?? false)
+                            && annotations["destructiveHint"] as? Bool ?? true))
                 }
                 cursor = result["nextCursor"] as? String
             } while cursor != nil && tools.count < 500
@@ -272,6 +280,11 @@ extension MCP {
 
         private func received(_ data: Data) {
             buffer.append(data)
+            if buffer.count > MCP.messageLimit && buffer.firstIndex(of: 0x0A) == nil {
+                buffer.removeAll()
+                failPending(Failure.server("The server sent a message over \(MCP.messageLimit / 1_048_576) MB."))
+                return
+            }
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = buffer[buffer.startIndex..<newline]
                 buffer.removeSubrange(buffer.startIndex...newline)
@@ -359,6 +372,16 @@ extension MCP {
         private var sessionID: String?
         private var negotiatedVersion: String?
 
+        /// Redirects aren't followed: they'd carry your headers (tokens) to wherever they point.
+        private static let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+
+        /// Plain http only on this Mac: elsewhere your tokens and words would cross the network unencrypted.
+        static func isAllowed(_ url: URL) -> Bool {
+            if url.scheme == "https" { return true }
+            guard url.scheme == "http", let host = url.host()?.lowercased() else { return false }
+            return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+        }
+
         init(url: URL, headers: [String: String], onToolsChanged: @escaping @Sendable () -> Void) {
             self.url = url
             self.headers = headers
@@ -378,7 +401,10 @@ extension MCP {
                 // Each event's data is one JSON message; skip the server's own requests and
                 // notifications until our answer arrives.
                 var pendingData = ""
+                var received = 0
                 for try await line in bytes.lines {
+                    received += line.utf8.count
+                    if received > MCP.messageLimit { throw Failure.server("The server's answer was too large.") }
                     guard line.hasPrefix("data:") else { continue }
                     pendingData += line.dropFirst(5).trimmingCharacters(in: .whitespaces)
                     guard let message = try? JSONSerialization.jsonObject(with: Data(pendingData.utf8)) as? [String: Any]
@@ -389,7 +415,10 @@ extension MCP {
                 throw Failure.badReply
             }
             var data = Data()
-            for try await byte in bytes { data.append(byte) }
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > MCP.messageLimit { throw Failure.server("The server's answer was too large.") }
+            }
             let object = try? JSONSerialization.jsonObject(with: data)
             for message in (object as? [[String: Any]]) ?? [object as? [String: Any]].compactMap({ $0 }) {
                 if let answer = await handle(message, waitingFor: id) { return answer }
@@ -409,7 +438,7 @@ extension MCP {
             request.timeoutInterval = 3
             request.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
             for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
-            _ = try? await URLSession.shared.data(for: request)
+            _ = try? await Self.session.data(for: request)
             self.sessionID = nil
         }
 
@@ -423,7 +452,7 @@ extension MCP {
             if let negotiatedVersion { request.setValue(negotiatedVersion, forHTTPHeaderField: "MCP-Protocol-Version") }
             for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
             request.httpBody = try JSONSerialization.data(withJSONObject: message)
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let (bytes, response) = try await Self.session.bytes(for: request)
             guard let http = response as? HTTPURLResponse else { throw Failure.badReply }
             if let session = http.value(forHTTPHeaderField: "Mcp-Session-Id") { sessionID = session }
             guard (200..<300).contains(http.statusCode) else {
@@ -447,5 +476,12 @@ extension MCP {
             }
             return MCP.messageID(message) == id ? message : nil
         }
+    }
+}
+
+private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        nil
     }
 }

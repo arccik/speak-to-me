@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Observation
 
@@ -56,29 +57,41 @@ final class ToolHub {
         self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SpeakToMe")
         self.defaults = defaults
-        enabledPlugins = Set(defaults.stringArray(forKey: "enabledPlugins") ?? [])
         disabledServers = Set(defaults.stringArray(forKey: "disabledServers") ?? [])
         disabledTools = Set(defaults.stringArray(forKey: "disabledTools") ?? [])
+        trustedTools = Set(defaults.stringArray(forKey: "trustedTools") ?? [])
+        approvedPlugins = defaults.dictionary(forKey: "approvedPlugins") as? [String: String] ?? [:]
     }
 
     // MARK: Switches
 
     /// The switches, kept here (not only in UserDefaults) so Settings redraws when they change.
-    private var enabledPlugins: Set<String> { didSet { defaults.set(enabledPlugins.sorted(), forKey: "enabledPlugins") } }
+    /// Each plugin you switched on, with a fingerprint of its files at that moment.
+    private var approvedPlugins: [String: String] { didSet { defaults.set(approvedPlugins, forKey: "approvedPlugins") } }
+    /// Tools that change things but can't delete, which you said may run without asking.
+    private var trustedTools: Set<String> { didSet { defaults.set(trustedTools.sorted(), forKey: "trustedTools") } }
     private var disabledServers: Set<String> { didSet { defaults.set(disabledServers.sorted(), forKey: "disabledServers") } }
     private var disabledTools: Set<String> { didSet { defaults.set(disabledTools.sorted(), forKey: "disabledTools") } }
 
-    /// Plugins can run programs, so each one is off until you switch it on.
-    func isPluginOn(_ plugin: Plugin) -> Bool { enabledPlugins.contains(plugin.id) }
+    /// Plugins can run programs, so each one is off until you switch it on, and goes off
+    /// again if its plugin.json or instructions change, so nothing new runs without you.
+    func isPluginOn(_ plugin: Plugin) -> Bool {
+        plugin.problem == nil && approvedPlugins[plugin.id] == plugin.fingerprint
+    }
+
+    /// Switched on once, but its files changed since.
+    func pluginChanged(_ plugin: Plugin) -> Bool {
+        approvedPlugins[plugin.id].map { $0 != plugin.fingerprint } ?? false
+    }
 
     func setPlugin(_ plugin: Plugin, on: Bool) {
-        if on { enabledPlugins.insert(plugin.id) } else { enabledPlugins.remove(plugin.id) }
+        approvedPlugins[plugin.id] = on ? plugin.fingerprint : nil
         for server in servers where server.plugin == plugin.id { apply(server.id) }
     }
 
     /// Servers you added yourself are on unless switched off (or `"disabled": true`).
     func isServerOn(_ server: Server) -> Bool {
-        if let plugin = server.plugin, !enabledPlugins.contains(plugin) { return false }
+        if let id = server.plugin, !(plugins.first { $0.id == id }.map(isPluginOn) ?? false) { return false }
         return !server.spec.disabled && !disabledServers.contains(server.id)
     }
 
@@ -101,6 +114,50 @@ final class ToolHub {
 
     func setTool(server serverID: String, tool: String, on: Bool) {
         if on { disabledTools.remove(toolKey(serverID, tool)) } else { disabledTools.insert(toolKey(serverID, tool)) }
+    }
+
+    /// How a tool is allowed to run.
+    enum Permission {
+        /// Its server says it only reads.
+        case readOnly
+        /// It changes things, and asks first unless you said otherwise.
+        case asks(trusted: Bool)
+        /// It may delete or overwrite things: it asks every time, and that can't be switched off.
+        case alwaysAsks
+    }
+
+    /// Decided by what the server itself says about the tool. A plugin's "readOnly" only
+    /// lets drafts call it early; it can't skip asking you.
+    func permission(server serverID: String, tool: MCP.Tool) -> Permission {
+        if tool.readOnly { return .readOnly }
+        if tool.destructive { return .alwaysAsks }
+        return .asks(trusted: trustedTools.contains(toolKey(serverID, tool.name)))
+    }
+
+    func setTrusted(server serverID: String, tool: String, trusted: Bool) {
+        if trusted { trustedTools.insert(toolKey(serverID, tool)) } else { trustedTools.remove(toolKey(serverID, tool)) }
+    }
+
+    /// The model wants to run something that needs your OK first. Built-in tools never do:
+    /// they can only open apps and http(s) pages, and read the web.
+    func needsApproval(_ call: OMLXClient.ToolCall) -> Bool {
+        guard let (server, tool) = resolve(call.name) else { return false }
+        switch permission(server: server.id, tool: tool) {
+        case .readOnly, .asks(trusted: true): return false
+        case .asks(trusted: false), .alwaysAsks: return true
+        }
+    }
+
+    /// What the approval card shows: which tool, from where, and with what.
+    func approvalDetails(_ call: OMLXClient.ToolCall) -> (title: String, server: String, arguments: String, destructive: Bool) {
+        guard let (server, tool) = resolve(call.name) else { return (call.name, "", call.arguments, true) }
+        var arguments = call.arguments
+        if let object = try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8)),
+           let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
+            arguments = String(decoding: pretty, as: UTF8.self)
+        }
+        let origin = server.plugin.map { id in "\(plugins.first { $0.id == id }?.name ?? id) plugin" } ?? server.name
+        return (tool.title ?? tool.name, origin, String(arguments.prefix(1_500)), tool.destructive)
     }
 
     // MARK: What the model sees
@@ -300,10 +357,16 @@ final class ToolHub {
             guard let url = URL(string: expand(url)), ["http", "https"].contains(url.scheme ?? "") else {
                 throw MCP.Failure.server("That isn't a web address: \(url)")
             }
+            guard MCP.HTTPTransport.isAllowed(url) else {
+                throw MCP.Failure.server("Use https:// for a server on another computer: over plain http, anyone on the network could read or change what's sent.")
+            }
             return MCP.HTTPTransport(url: url, headers: headers.mapValues(expand), onToolsChanged: toolsChanged)
         case .local(let command, let args, let env, let cwd):
             let path = await ShellPath.value
-            var environment = ProcessInfo.processInfo.environment
+            // Only what a program needs to run; nothing else from the app's own environment.
+            let inherited = ProcessInfo.processInfo.environment
+            var environment = ["HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "__CF_USER_TEXT_ENCODING"]
+                .reduce(into: [String: String]()) { $0[$1] = inherited[$1] }
             environment["PATH"] = path
             for (key, value) in env { environment[key] = expand(value) }
             let command = expand(command)
@@ -358,6 +421,8 @@ final class ToolHub {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         try data.write(to: configURL, options: .atomic)
+        // It can hold tokens: readable by you only.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
     }
 
     func addServer(name: String, spec: [String: Any]) throws {
@@ -446,6 +511,8 @@ struct Plugin: Identifiable {
     let speech: [String: Speech]
     /// Why it couldn't be read, if it couldn't.
     let problem: String?
+    /// A hash of plugin.json and instructions.md, to notice when either changes.
+    var fingerprint = ""
 
     static func loadAll(from folder: URL) -> [Plugin] {
         let entries = (try? FileManager.default.contentsOfDirectory(
@@ -484,10 +551,13 @@ struct Plugin: Identifiable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        return Plugin(
+        var plugin = Plugin(
             id: id, name: json["name"] as? String ?? id, description: json["description"] as? String ?? "",
             version: (json["version"] as? String) ?? (json["version"] as? NSNumber)?.stringValue,
             instructions: instructions.isEmpty ? nil : instructions, servers: servers, speech: speech, problem: problem)
+        let hashed = data + Data((file ?? "").utf8)
+        plugin.fingerprint = SHA256.hash(data: hashed).map { String(format: "%02x", $0) }.joined()
+        return plugin
     }
 }
 

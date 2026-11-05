@@ -85,7 +85,14 @@ struct ContentView: View {
                 }
             }
             .ignoresSafeArea(.container, edges: .top) // the top bar shares the traffic lights' row
+            if let approval = session.approval {
+                ApprovalCard(approval: approval)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(duration: 0.4, bounce: 0.1), value: session.approval?.id)
         .animation(.spring(duration: 0.55, bounce: 0.1), value: showChat)
         .tint(Theme.ink)
         .preferredColorScheme(.dark)
@@ -317,6 +324,52 @@ private struct ModelMenu: View {
 // MARK: - Status
 
 /// What's happening, in one word you can read from across the room.
+/// A tool wants to change something on your Mac or in your accounts: it waits for you.
+private struct ApprovalCard: View {
+    @Environment(VoiceSession.self) private var session
+    let approval: VoiceSession.Approval
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(approval.destructive ? "Allow this? It may delete or overwrite things." : "Allow this?",
+                  systemImage: approval.destructive ? "exclamationmark.triangle.fill" : "hand.raised.fill")
+                .font(.headline)
+                .foregroundStyle(approval.destructive ? Color.orange : Theme.replyText)
+            Text("\(approval.title)  ·  \(approval.server)")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Theme.replyText)
+            ScrollView {
+                Text(approval.arguments)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Theme.replyText.opacity(0.85))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 140)
+            .padding(8)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text("Check what it will do. Talking, or no answer in 2 minutes, counts as no.")
+                .font(.caption)
+                .foregroundStyle(Theme.replyText.opacity(0.7))
+            HStack {
+                Spacer()
+                Button("Don't Allow") { session.answerApproval(false) }
+                    .keyboardShortcut(.cancelAction)
+                Button("Allow") { session.answerApproval(true) }
+                    .tint(approval.destructive ? .orange : Theme.accent)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 460)
+        .background(Theme.abyss.opacity(0.96), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.12)))
+        .shadow(radius: 20)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Approval needed for \(approval.title)")
+    }
+}
+
 private struct StatusLine: View {
     @Environment(VoiceSession.self) private var session
 
