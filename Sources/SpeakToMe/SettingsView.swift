@@ -4,7 +4,7 @@ import SwiftUI
 /// Settings as a sidebar of panes, in the style of System Settings.
 struct SettingsView: View {
     enum Pane: String, CaseIterable, Identifiable {
-        case general, shortcuts, voice, cloning, conversation, model
+        case general, shortcuts, voice, cloning, conversation, tools, model
 
         var id: Self { self }
         var title: String { self == .cloning ? "Voice Cloning" : rawValue.capitalized }
@@ -15,7 +15,8 @@ struct SettingsView: View {
             case .shortcuts: return "Talk or bring up the face from any app"
             case .voice: return "Which model speaks each language, and how"
             case .cloning: return "Hear replies in a voice you record"
-            case .conversation: return "Turn-taking, system prompt and tools"
+            case .conversation: return "Turn-taking and the system prompt"
+            case .tools: return "Built-in tools, MCP servers and plugins"
             case .model: return "The language model in oMLX"
             }
         }
@@ -27,6 +28,7 @@ struct SettingsView: View {
             case .voice: return "waveform"
             case .cloning: return "person.wave.2.fill"
             case .conversation: return "bubble.left.and.bubble.right.fill"
+            case .tools: return "wrench.and.screwdriver.fill"
             case .model: return "cpu.fill"
             }
         }
@@ -67,6 +69,7 @@ struct SettingsView: View {
                 case .voice: VoicePane()
                 case .cloning: VoiceCloningPane()
                 case .conversation: ConversationPane()
+                case .tools: ToolsPane()
                 case .model: ModelPane()
                 }
                 }
@@ -115,7 +118,7 @@ private struct LabeledSlider<V: BinaryFloatingPoint>: View where V.Stride: Binar
 }
 
 /// Section footer: small, secondary, leading-aligned however long it wraps.
-private struct Footer: View {
+struct Footer: View {
     let text: String
     init(_ text: String) { self.text = text }
 
@@ -757,15 +760,8 @@ private struct ConversationPane: View {
                 Text("System prompt")
             } footer: {
                 Footer(session.addsPromptRules
-                    ? "Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (below), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply."
+                    ? "Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (Tools pane), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply."
                     : "The text above is the entire system prompt. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply; start a new conversation (⌘N) if replies keep echoing the old style.")
-            }
-            Section {
-                Toggle("Let it use tools", isOn: $session.useTools)
-            } header: {
-                Text("Tools")
-            } footer: {
-                Footer("Web search, the time, and opening apps or pages. Replies that need them take a few seconds longer.")
             }
         }
     }

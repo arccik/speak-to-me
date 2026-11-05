@@ -8,6 +8,18 @@ enum Main {
         if let flag = args.firstIndex(of: "--tts-worker") {
             TTSWorker.runWorker(voice: args.indices.contains(flag + 1) ? args[flag + 1] : "af_heart")
         }
+        if args.contains("--mcp-test-server") {
+            MCPSelfTest.runStdioServer()
+        }
+        if let flag = args.firstIndex(of: "--mcplist") {
+            let dir = args.indices.contains(flag + 1) ? URL(fileURLWithPath: args[flag + 1]) : nil
+            Task { @MainActor in await MCPSelfTest.list(root: dir) }
+            dispatchMain()
+        }
+        if args.contains("--mcptest") {
+            Task { @MainActor in await MCPSelfTest.run() }
+            dispatchMain()
+        }
         if args.contains("--f5-worker") {
             F5Worker.run()
         }

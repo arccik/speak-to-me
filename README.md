@@ -37,6 +37,7 @@ Speak to Me is a native macOS app that turns any chat model served by [oMLX](htt
 - **Answers in your language.** The language you speak is detected, and you choose the speech model for English, Russian and other languages.
 - **Voice cloning.** Record a few seconds or pick an audio file, and hear replies in that voice in English or Russian.
 - **Useful tools.** Web search, reading pages, the current time, and opening apps and web pages.
+- **MCP servers and plugins.** Add tools from any [Model Context Protocol](https://modelcontextprotocol.io) server, on your Mac or at a web address, or drop in a plugin folder. See [Tools, MCP and plugins](#tools-mcp-and-plugins).
 - **Sees your screen** when you ask, with a vision model and Screen Recording permission.
 - **Talk or type.** Typed messages work too, and spoken replies can be muted.
 - **Saved conversations,** kept on your Mac. The last one reopens on launch.
@@ -105,13 +106,54 @@ To keep the microphone permission across rebuilds, sign in to Xcode with an Appl
 
 **For faster replies,** pick a mixture-of-experts model such as `gemma-4-26b-a4b` at the top of the window, because dense models of 12B and up feel slow in conversation. The ⚡ number shows the time from when you stopped talking to the first word of the reply. On the M5 above, that's about 1.2 s with Kokoro and that Gemma model, including the 0.77 s wait to be sure you've finished.
 
+## Tools, MCP and plugins
+
+Settings → Tools lists every tool the model can use, each with its own switch.
+
+**MCP servers.** Click **Add Server…** and give either a command, such as `npx -y @modelcontextprotocol/server-filesystem ~/Documents`, or a web address for a remote server. Servers are saved in `~/Library/Application Support/SpeakToMe/mcp.json`, in the same `mcpServers` format as Claude Desktop, so you can paste servers from there:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/Documents"] },
+    "docs": { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer …" } }
+  }
+}
+```
+
+Commands are found through your login shell's `PATH`, so `npx`, `uvx` and Homebrew programs work. Remote servers that need a browser sign-in (OAuth) aren't supported yet. Use a token in `headers` instead.
+
+**Plugins.** A plugin is a folder in `~/Library/Application Support/SpeakToMe/Plugins` with a `plugin.json`:
+
+```json
+{
+  "name": "Calendar",
+  "description": "Reads your calendar",
+  "version": "1.0",
+  "instructions": "Use the calendar tools when the user asks about their day.",
+  "mcpServers": { "calendar": { "command": "${PLUGIN_DIR}/calendar-server" } },
+  "speech": {
+    "list_events": { "label": "Checked your calendar", "filler": "Let me look at your calendar.", "readOnly": true }
+  }
+}
+```
+
+`instructions` are added to the system prompt while the plugin is on. An `instructions.md` file next to `plugin.json` works too. `speech` sets what's shown under the reply and said while a slow tool runs. `${PLUGIN_DIR}` is the plugin's folder. Plugins can run programs, so each one stays off until you switch it on.
+
+**Good to know:**
+
+- **Drafts.** Replies are drafted before you finish talking, and a draft may be thrown away. So a tool only runs in a draft if its server or plugin marks it read-only. Every other tool waits until the reply is real.
+- **How many tools.** Small local models pick the wrong tool more often when they have many to choose from, and every tool makes replies a little slower to start. Settings warns you past 20.
+- **Checking your setup.** `SpeakToMe --mcplist` starts your servers and prints their tools, or why each one failed.
+
 ## Privacy
 
 Your voice, conversations and cloned voices stay on your Mac. The app connects to the network only for:
 
 - your oMLX server, which is local by default
 - downloading speech models from Hugging Face
-- web search and page reading, when the model uses those tools (turn them off in Settings → Conversation)
+- web search and page reading, when the model uses those tools (turn them off in Settings → Tools)
+- MCP servers you add at a web address, which get whatever the model passes to their tools
 
 Only clone a voice you have permission to use.
 

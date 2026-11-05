@@ -213,7 +213,16 @@ final class VoiceSession {
     }
 
     /// Read afresh for every request, so an edit in Settings applies to the next reply.
+    /// Instructions from plugins that are on come last, while tools are on.
     var fullSystemPrompt: String {
+        var prompt = appRulesPrompt
+        let plugins = ToolHub.shared.instructions
+        if addsPromptRules && useTools && !plugins.isEmpty { prompt += " " + plugins }
+        return prompt
+    }
+
+    /// Your prompt and the app's rules, without anything from plugins.
+    private var appRulesPrompt: String {
         Self.composeSystemPrompt(systemPrompt, expressive: expressiveVoice, tools: useTools, matchLanguage: matchLanguage,
                                  addsRules: addsPromptRules)
     }
@@ -223,7 +232,8 @@ final class VoiceSession {
     func setWritesWholePrompt(_ whole: Bool) {
         guard whole == addsPromptRules else { return }
         if whole {
-            systemPrompt = fullSystemPrompt
+            // Plugins' instructions stay theirs: switching a plugin off still takes them out.
+            systemPrompt = appRulesPrompt
         } else {
             var text = systemPrompt
             for rule in [Self.spokenPrompt, Self.conversationPrompt, Self.expressivePrompt, Self.toolsPrompt, Self.matchLanguagePrompt] {
@@ -282,6 +292,7 @@ final class VoiceSession {
     func bootOnce() async {
         guard !booted else { return }
         booted = true
+        ToolHub.shared.startOnce()
         await boot()
     }
 
@@ -1126,7 +1137,7 @@ final class VoiceSession {
                 for round in 0..<4 {
                     var calls: [OMLXClient.ToolCall] = []
                     var roundText = ""
-                    let tools = useTools && round < 3 ? Tools.definitions : []
+                    let tools = useTools && round < 3 ? ToolHub.shared.definitions : []
                     for try await event in client.streamChat(model: modelID, messages: messages, tools: tools) {
                         try Task.checkCancellation()
                         switch event {
@@ -1144,19 +1155,19 @@ final class VoiceSession {
 
                     for sentence in chunker.finish() { sentenceSink.yield(sentence) }
                     chunker = SentenceChunker()
-                    if turn.reply.isEmpty, let filler = calls.lazy.compactMap(Tools.filler).first,
+                    if turn.reply.isEmpty, let filler = calls.lazy.compactMap(ToolHub.shared.filler).first,
                        turnLanguage == "en" || !matchLanguage {
                         sentenceSink.yield(filler)
                     }
                     messages.append(.init(role: "assistant", content: SentenceChunker.visible(roundText), toolCalls: calls))
                     for call in calls {
                         // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
-                        while Tools.hasSideEffects(call) && !turn.committed {
+                        while ToolHub.shared.hasSideEffects(call) && !turn.committed {
                             try await Task.sleep(for: .milliseconds(50))
                         }
-                        turn.notes.append(Tools.label(for: call))
+                        turn.notes.append(ToolHub.shared.label(for: call))
                         if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
-                        let result = await Tools.run(call, client: client)
+                        let result = await ToolHub.shared.run(call, client: client)
                         try Task.checkCancellation()
                         messages.append(.init(role: "tool", content: result, toolCallID: call.id))
                     }

@@ -68,6 +68,8 @@ Drives the real conversation loop with typed messages (time, web search, a joke,
 | `--clonetest <dir>` | Clones a voice from a Kokoro-made sample; writes `sample.wav` and `cloned.wav` |
 | `--snapshot <dir>` | Renders the window in several states to PNGs |
 | `--micdiag` (via `open … --args`) | Checks mic permission and that the audio engine starts |
+| `--mcptest` | MCP servers and plugins end to end: the app plays a local server and a remote one in a temporary folder. Needs no oMLX |
+| `--mcplist [dir]` | Starts the servers in your `mcp.json` (or `dir`'s) and plugins that are on, and prints their tools or why they failed |
 
 Run these from the app bundle and they use your real settings; a few change a setting and restore it afterwards.
 
@@ -85,8 +87,11 @@ Everything is in `Sources/SpeakToMe`.
 - `RussianStress.swift`: stress marks from RUAccent's dictionary, searched on disk
 - `TTSWorker.swift`: the crash-isolated voice helper process (Kokoro + PocketTTS) with a hot standby
 - `OMLXClient.swift`: model list, streaming chat with images and tool calls, model pinning
-- `Tools.swift`: web search, page reading, time, opening apps and pages
+- `Tools.swift`: the built-in tools: web search, page reading, time, opening apps and pages
+- `ToolHub.swift`: every tool the model sees (built-in, MCP and plugin), their switches, `mcp.json` and `plugin.json`
+- `MCPClient.swift`: a tools-only MCP client over stdio (servers the app launches) and Streamable HTTP
+- `SettingsTools.swift`: Settings → Tools
 - `SentenceChunker.swift`: splits the streamed reply into speakable pieces and strips markdown
 - `ContentView.swift` (window, chat), `SettingsView.swift`, `Visuals.swift`, `FaceEngine.swift`, `FaceRenderer.swift` and `MistControls.swift` (the face: lips from the voice, expression, shader, and the mist behind the controls)
 - `ScreenVision.swift`, `Languages.swift`, `SoundCues.swift`, `HotKey.swift`, `MiniOrb.swift`, `ConversationStore.swift`
-- `SelfTest.swift`, `Snapshots.swift`, `MicDiagnostics.swift`, `Bench.swift`: the test modes above
+- `SelfTest.swift`, `MCPSelfTest.swift`, `Snapshots.swift`, `MicDiagnostics.swift`, `Bench.swift`: the test modes above
