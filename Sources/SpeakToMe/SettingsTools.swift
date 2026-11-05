@@ -24,7 +24,7 @@ struct ToolsPane: View {
             } footer: {
                 Footer(countNote)
             }
-            .onAppear { hub.startOnce() }
+            .onAppear { if !Snapshots.isRendering { hub.startOnce() } }
 
             Section {
                 ForEach(Tools.definitions.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }, id: \.self) { name in
@@ -59,7 +59,7 @@ struct ToolsPane: View {
             } header: {
                 Text("MCP servers")
             } footer: {
-                Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. A tool that can change things asks you in the main window before it runs, and one that may delete or overwrite things asks every time. Only add servers you trust: a program you add here runs with your permissions. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
+                Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. A tool that can change things asks you in the main window before it runs, and one that may delete or overwrite things asks every time. Read-only claims also ask until you explicitly trust the tool. Changed server settings or tool definitions revoke that trust. Only add servers you trust: a program you add here runs with your permissions. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
             }
 
             Section {
@@ -80,7 +80,7 @@ struct ToolsPane: View {
             } header: {
                 Text("Plugins")
             } footer: {
-                Footer("A plugin is a folder with a plugin.json that lists MCP servers to start, instructions for the model and how to announce its tools out loud. Plugins can run programs, so each one stays off until you switch it on.")
+                Footer("A plugin is a folder with a plugin.json that lists MCP servers to start, instructions for the model and how to announce its tools out loud. Plugins can run programs, so each one stays off until you switch it on. Reload detects manifest and instruction edits; executable files and dependencies are not verified.")
             }
         }
         .sheet(isPresented: $adding) { AddServerSheet() }
@@ -135,17 +135,22 @@ private struct PermissionLine: View {
     var body: some View {
         switch hub.permission(server: serverID, tool: tool) {
         case .readOnly:
-            note("Only reads, so it runs without asking", "eye")
+            Toggle("Trust this tool’s read-only claim", isOn: Binding(get: { true }, set: { hub.setTrusted(server: serverID, tool: tool.name, trusted: $0) }))
+                .font(.caption)
+                .padding(.leading, 12)
         case .alwaysAsks:
             note("May delete or overwrite things, so it asks every time", "exclamationmark.shield")
         case .asks(let trusted):
             Toggle(isOn: Binding(get: { !trusted }, set: { hub.setTrusted(server: serverID, tool: tool.name, trusted: !$0) })) {
-                Label("Ask before it changes anything", systemImage: "hand.raised")
+                Label(tool.readOnly ? "Ask before this tool runs" : "Ask before it changes anything", systemImage: "hand.raised")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .controlSize(.mini)
             .padding(.leading, 12)
+            if tool.readOnly {
+                note("Its server says it only reads. Turn off asking only if you trust that claim and the data sent to it.", "eye")
+            }
         }
     }
 

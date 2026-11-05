@@ -342,6 +342,11 @@ The type field replaces the action row: Didot 22pt cold white on a firm puff tha
 ### The Fog Bank
 The conversation, rolling up as a bank of Void over the lower window (0.55 second spring, slight bounce), with a soft top edge. It holds the status word, a Hide wisp, a scrolling transcript and the same dock. There are no bubbles. Your lines are cold white on the right, with words still being heard at 80%. Replies are long bone on the left, and cut-off replies drop to 82% (9:1) with a "You cut in here" scissors note. Tool and screen notes use small print with a symbol. New rows fade up 12pt in 0.25 seconds, and the transcript fades out over its top 5%.
 
+### Action History
+Tool actions appear as a quiet disclosure below the reply, in the conversation and on the stage when the conversation is closed. The collapsed label gives the count and latest state. Expanded rows show the actual tool name and server, an icon and written state, elapsed time, and inspectable arguments and results. Unknown outcomes explicitly tell the user to check the service before repeating an action. Reconnect is available in the details of failed MCP actions and never repeats the action.
+
+Keep history text cold white in Avenir Next at 12–13pt, with arguments in system monospace. Use no new card, shadow or decorative animation. Bound the expanded scroll region so the talk controls remain reachable at minimum window size. Status is always communicated in text and symbols. Credential fields are redacted in live history, and argument/result payloads are not persisted with action records. The approval card is the existing protected action surface: it shows full arguments, including the actual tool name, and does not silently truncate.
+
 ### Floating Face
 The head alone on a transparent, always-on-top panel with no window shadow, sharing the main window's engine, so it says the same things. Its edges dissolve into the desktop, carrying the photograph's dark surround with them, so on a light desktop the head sits in a ragged patch of black. Click starts or stops, dragging moves it, and right-click opens a menu. Light text can't sit on an unknown desktop, so the caption and the 2-line snippet of the last 90 characters sit on firm mist with a darkened mist layer behind.
 

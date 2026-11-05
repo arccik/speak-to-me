@@ -59,7 +59,7 @@ final class ToolHub {
         self.defaults = defaults
         disabledServers = Set(defaults.stringArray(forKey: "disabledServers") ?? [])
         disabledTools = Set(defaults.stringArray(forKey: "disabledTools") ?? [])
-        trustedTools = Set(defaults.stringArray(forKey: "trustedTools") ?? [])
+        trustedTools = Set(defaults.stringArray(forKey: "trustedToolFingerprintsV2") ?? [])
         approvedPlugins = defaults.dictionary(forKey: "approvedPlugins") as? [String: String] ?? [:]
     }
 
@@ -68,13 +68,13 @@ final class ToolHub {
     /// The switches, kept here (not only in UserDefaults) so Settings redraws when they change.
     /// Each plugin you switched on, with a fingerprint of its files at that moment.
     private var approvedPlugins: [String: String] { didSet { defaults.set(approvedPlugins, forKey: "approvedPlugins") } }
-    /// Tools that change things but can't delete, which you said may run without asking.
-    private var trustedTools: Set<String> { didSet { defaults.set(trustedTools.sorted(), forKey: "trustedTools") } }
+    /// Explicit grants bound to a server configuration and tool definition.
+    private var trustedTools: Set<String> { didSet { defaults.set(trustedTools.sorted(), forKey: "trustedToolFingerprintsV2") } }
     private var disabledServers: Set<String> { didSet { defaults.set(disabledServers.sorted(), forKey: "disabledServers") } }
     private var disabledTools: Set<String> { didSet { defaults.set(disabledTools.sorted(), forKey: "disabledTools") } }
 
-    /// Plugins can run programs, so each one is off until you switch it on, and goes off
-    /// again if its plugin.json or instructions change, so nothing new runs without you.
+    /// Plugins can run programs, so each one is off until you switch it on. Reload
+    /// notices manifest/instruction edits; it does not verify executable dependencies.
     func isPluginOn(_ plugin: Plugin) -> Bool {
         plugin.problem == nil && approvedPlugins[plugin.id] == plugin.fingerprint
     }
@@ -113,12 +113,13 @@ final class ToolHub {
     }
 
     func setTool(server serverID: String, tool: String, on: Bool) {
+        policyGeneration = UUID()
         if on { disabledTools.remove(toolKey(serverID, tool)) } else { disabledTools.insert(toolKey(serverID, tool)) }
     }
 
     /// How a tool is allowed to run.
     enum Permission {
-        /// Its server says it only reads.
+        /// You explicitly trust the server's claim that it only reads.
         case readOnly
         /// It changes things, and asks first unless you said otherwise.
         case asks(trusted: Bool)
@@ -126,16 +127,20 @@ final class ToolHub {
         case alwaysAsks
     }
 
-    /// Decided by what the server itself says about the tool. A plugin's "readOnly" only
-    /// lets drafts call it early; it can't skip asking you.
+    /// An annotation alone never grants automatic execution. A read-only claim needs
+    /// explicit user trust; destructive tools always ask regardless of saved grants.
     func permission(server serverID: String, tool: MCP.Tool) -> Permission {
-        if tool.readOnly { return .readOnly }
         if tool.destructive { return .alwaysAsks }
-        return .asks(trusted: trustedTools.contains(toolKey(serverID, tool.name)))
+        let trusted = trustKey(serverID, tool).map { trustedTools.contains($0) } ?? false
+        if tool.readOnly && trusted { return .readOnly }
+        return .asks(trusted: trusted)
     }
 
     func setTrusted(server serverID: String, tool: String, trusted: Bool) {
-        if trusted { trustedTools.insert(toolKey(serverID, tool)) } else { trustedTools.remove(toolKey(serverID, tool)) }
+        policyGeneration = UUID()
+        guard let definition = servers.first(where: { $0.id == serverID })?.tools.first(where: { $0.name == tool }),
+              let key = trustKey(serverID, definition) else { return }
+        if trusted { trustedTools.insert(key) } else { trustedTools.remove(key) }
     }
 
     /// The model wants to run something that needs your OK first. Built-in tools never do:
@@ -157,7 +162,8 @@ final class ToolHub {
             arguments = String(decoding: pretty, as: UTF8.self)
         }
         let origin = server.plugin.map { id in "\(plugins.first { $0.id == id }?.name ?? id) plugin" } ?? server.name
-        return (tool.title ?? tool.name, origin, String(arguments.prefix(1_500)), tool.destructive)
+        let title = tool.title.map { $0 == tool.name ? $0 : "\($0) (\(tool.name))" } ?? tool.name
+        return (title, origin, arguments, tool.destructive)
     }
 
     // MARK: What the model sees
@@ -190,7 +196,8 @@ final class ToolHub {
     }
 
     private func resolve(_ name: String) -> (Server, MCP.Tool)? {
-        activeTools.first { Self.qualifiedName($0.0.prefix, $0.1.name) == name }
+        let matches = activeTools.filter { Self.qualifiedName($0.0.prefix, $0.1.name) == name }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     private func hint(_ server: Server, _ tool: MCP.Tool) -> Plugin.Speech? {
@@ -215,25 +222,121 @@ final class ToolHub {
             return Tools.definitions.contains { ($0["function"] as? [String: Any])?["name"] as? String == call.name }
                 ? Tools.hasSideEffects(call) : false
         }
-        if let readOnly = hint(server, tool)?.readOnly { return !readOnly }
-        return !tool.readOnly
+        // Only explicitly trusted, server-declared reads can run in a draft.
+        if case .readOnly = permission(server: server.id, tool: tool) { return false }
+        return true
     }
 
-    func run(_ call: OMLXClient.ToolCall, client: OMLXClient) async -> String {
-        guard let (server, tool) = resolve(call.name) else { return await Tools.run(call, client: client) }
-        guard let connection = connections[server.id] else { return "\(server.name) isn't running." }
-        let arguments = (try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8)) as? [String: Any]) ?? [:]
+    /// A request keeps the identities it was actually offered. A model cannot invent
+    /// a tool or reuse an old name after a reload and get it dispatched.
+    struct Catalog {
+        let definitions: [[String: Any]]
+        fileprivate let identities: [String: String]
+    }
+
+    struct PreparedCall {
+        let call: OMLXClient.ToolCall
+        let title: String
+        let server: String
+        let serverID: String?
+        let arguments: String
+        let needsApproval: Bool
+        let hasSideEffects: Bool
+        let destructive: Bool
+        fileprivate let identity: String
+    }
+
+    var enabled = true { didSet { if enabled != oldValue { policyGeneration = UUID() } } }
+
+    func catalog(available: Bool = true) -> Catalog {
+        guard enabled && available else { return Catalog(definitions: [], identities: [:]) }
+        let definitions = definitions.filter { definition in
+            guard let name = (definition["function"] as? [String: Any])?["name"] as? String else { return false }
+            return identity(for: name) != nil
+        }
+        var identities: [String: String] = [:]
+        for definition in definitions {
+            if let name = (definition["function"] as? [String: Any])?["name"] as? String { identities[name] = identity(for: name) }
+        }
+        return Catalog(definitions: definitions, identities: identities)
+    }
+
+    func prepare(_ call: OMLXClient.ToolCall, catalog: Catalog) throws -> PreparedCall {
+        guard enabled, let offered = catalog.identities[call.name], offered == identity(for: call.name) else {
+            throw MCP.Failure.server("This tool is off, changed, or wasn't offered for this reply. Nothing ran.")
+        }
+        guard call.arguments.utf8.count <= MCP.messageLimit,
+              (try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8))) is [String: Any] else {
+            throw MCP.Failure.server("The tool arguments aren't a valid JSON object. Nothing ran.")
+        }
+        let details = approvalDetails(call)
+        return PreparedCall(call: call, title: details.title, server: details.server.isEmpty ? "Built-in" : details.server,
+                            serverID: resolve(call.name)?.0.id, arguments: details.arguments,
+                            needsApproval: needsApproval(call), hasSideEffects: hasSideEffects(call),
+                            destructive: details.destructive, identity: offered)
+    }
+
+    func isCurrent(_ prepared: PreparedCall) -> Bool {
+        enabled && prepared.identity == identity(for: prepared.call.name)
+    }
+
+    func run(_ prepared: PreparedCall, approved: Bool = false, client: OMLXClient) async -> ToolOutcome {
+        guard !Task.isCancelled else { return .init(state: .cancelled, text: "Cancelled before starting. Nothing ran.") }
+        guard isCurrent(prepared) else { return .init(state: .blocked, text: "This tool is off or changed. Nothing ran. Ask again to use the current tool.") }
+        guard !prepared.needsApproval || approved else { return .init(state: .blocked, text: "This action needs permission. Nothing ran.") }
+        let call = prepared.call
+        guard let (server, tool) = resolve(call.name) else {
+            return await Tools.runOutcome(call, client: client)
+        }
+        guard let connection = connections[server.id],
+              let arguments = (try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8))) as? [String: Any] else {
+            return .init(state: .blocked, text: "The server isn't available. Nothing ran.")
+        }
         do {
-            let text = try await connection.callTool(tool.name, arguments: arguments)
-            return text.count > Self.resultLimit ? String(text.prefix(Self.resultLimit)) + "…" : text
+            let result = try await connection.callTool(tool.name, arguments: arguments)
+            let text = String(result.text.prefix(Self.resultLimit)) + (result.text.count > Self.resultLimit ? "…" : "")
+            return .init(state: result.isError ? .failed : .succeeded, text: result.isError ? "The tool reported an error: \(text)" : text)
         } catch {
-            return "\(tool.name) failed: \(error.localizedDescription)"
+            if case MCP.Failure.sessionExpired = error, connections[server.id] === connection { restart(server.id) }
+            let cancelled = Task.isCancelled || error is CancellationError
+            let state: ToolAction.State = prepared.hasSideEffects ? .unknown : (cancelled ? .cancelled : .failed)
+            let detail = prepared.hasSideEffects
+                ? "The action may have completed. Check \(server.name) before trying again. " : ""
+            return .init(state: state, text: detail + (cancelled ? "The reply was stopped." : error.localizedDescription))
         }
     }
 
-    /// OpenAI-style function names allow letters, digits, _ and -, up to 64 characters.
+    private func identity(for name: String) -> String? {
+        if Tools.definitions.contains(where: { ($0["function"] as? [String: Any])?["name"] as? String == name }) {
+            return isToolOn(server: "builtin", tool: name) ? "builtin/" + name + "/" + policyGeneration.uuidString : nil
+        }
+        guard let (server, tool) = resolve(name), let generation = attempts[server.id], let key = trustKey(server.id, tool) else { return nil }
+        return key + "/" + generation.uuidString + "/" + policyGeneration.uuidString
+    }
+
+    private var policyGeneration = UUID()
+
+    private func trustKey(_ id: String, _ tool: MCP.Tool) -> String? {
+        guard let server = servers.first(where: { $0.id == id }) else { return nil }
+        let object: [String: Any] = ["server": id, "config": server.spec.fingerprint,
+            "plugin": server.plugin.flatMap { id in plugins.first { $0.id == id }?.fingerprint } ?? "",
+            "name": tool.name, "title": tool.title ?? "", "description": tool.description,
+            "schema": (try? JSONSerialization.jsonObject(with: tool.schema)) ?? [:],
+            "readOnly": tool.readOnly, "destructive": tool.destructive]
+        return Self.digest((try? JSONSerialization.data(withJSONObject: object, options: .sortedKeys)) ?? Data())
+    }
+
+    nonisolated static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Preserve simple names, reserving a digest suffix for lossy transformations.
     nonisolated static func qualifiedName(_ prefix: String, _ tool: String) -> String {
-        String((prefix + "__" + sanitized(tool)).prefix(64))
+        let readable = sanitized(prefix) + "__" + sanitized(tool)
+        if readable.count <= 64 && sanitized(tool) == tool && sanitized(prefix) == prefix
+            && !prefix.contains("__") && !tool.contains("__") { return readable }
+        let suffix = String(digest(Data((prefix + "\u{0}" + tool).utf8)).prefix(16))
+        return String(readable.prefix(46)) + "__" + suffix
     }
 
     nonisolated static func sanitized(_ text: String) -> String {
@@ -256,6 +359,7 @@ final class ToolHub {
 
     /// Stops everything, reads the files again and starts what's on.
     func reload() {
+        policyGeneration = UUID()
         for connection in connections.values { Task { await connection.close() } }
         connections = [:]
         attempts = [:]
@@ -319,7 +423,7 @@ final class ToolHub {
         Task {
             var connection: MCP.Connection?
             do {
-                let transport = try await makeTransport(server.spec, pluginDir: pluginDir, serverID: id)
+                let transport = try await makeTransport(server.spec, pluginDir: pluginDir, serverID: id, attempt: attempt)
                 guard attempts[id] == attempt else { return }
                 let opened = MCP.Connection(transport: transport)
                 connection = opened
@@ -342,7 +446,7 @@ final class ToolHub {
         }
     }
 
-    private func makeTransport(_ spec: ServerSpec, pluginDir: URL?, serverID: String) async throws -> any MCP.Transport {
+    private func makeTransport(_ spec: ServerSpec, pluginDir: URL?, serverID: String, attempt: UUID) async throws -> any MCP.Transport {
         let expand = { (text: String) -> String in
             var text = text
             if let pluginDir { text = text.replacingOccurrences(of: "${PLUGIN_DIR}", with: pluginDir.path) }
@@ -350,7 +454,7 @@ final class ToolHub {
             return text
         }
         let toolsChanged: @Sendable () -> Void = { [weak self] in
-            Task { @MainActor in await self?.refreshTools(serverID) }
+            Task { @MainActor in await self?.refreshTools(serverID, attempt: attempt) }
         }
         switch spec.kind {
         case .remote(let url, let headers):
@@ -375,23 +479,47 @@ final class ToolHub {
                 executable: executable, arguments: args.map(expand), environment: environment,
                 directory: cwd.map { URL(fileURLWithPath: expand($0)) },
                 onExit: { [weak self] detail in
-                    Task { @MainActor in self?.exited(serverID, detail) }
+                    Task { @MainActor in self?.exited(serverID, detail, attempt: attempt) }
                 },
                 onToolsChanged: toolsChanged)
         }
     }
 
-    private func exited(_ id: String, _ detail: String) {
+    private func exited(_ id: String, _ detail: String, attempt: UUID) {
+        guard attempts[id] == attempt else { return }
         connections[id] = nil
         guard let i = servers.firstIndex(where: { $0.id == id }) else { return }
         servers[i].tools = []
         servers[i].status = .failed(MCP.Failure.exited(detail).localizedDescription)
     }
 
-    private func refreshTools(_ id: String) async {
-        guard let connection = connections[id], let tools = try? await connection.listTools(),
-              let i = servers.firstIndex(where: { $0.id == id }) else { return }
-        servers[i].tools = tools
+    private var refreshing: [String: UUID] = [:]
+    private var refreshAgain: [String: UUID] = [:]
+
+    private func refreshTools(_ id: String, attempt: UUID) async {
+        guard attempts[id] == attempt, let connection = connections[id] else { return }
+        if refreshing[id] == attempt { refreshAgain[id] = attempt; return }
+        refreshing[id] = attempt
+        defer {
+            if refreshing[id] == attempt { refreshing[id] = nil }
+            if refreshAgain[id] == attempt {
+                refreshAgain[id] = nil
+                Task { await refreshTools(id, attempt: attempt) }
+            }
+        }
+        do {
+            let tools = try await connection.listTools()
+            guard attempts[id] == attempt, connections[id] === connection,
+                  let i = servers.firstIndex(where: { $0.id == id }) else { return }
+            servers[i].tools = tools
+        } catch {
+            guard attempts[id] == attempt, connections[id] === connection else { return }
+            connections[id] = nil
+            await connection.close()
+            guard attempts[id] == attempt, let i = servers.firstIndex(where: { $0.id == id }) else { return }
+            servers[i].tools = []
+            servers[i].status = .failed(error.localizedDescription)
+        }
     }
 
     // MARK: mcp.json
@@ -453,9 +581,11 @@ struct ServerSpec {
     }
 
     let kind: Kind
+    let fingerprint: String
     var disabled = false
 
     init(_ object: [String: Any], name: String) throws {
+        fingerprint = ToolHub.digest(try JSONSerialization.data(withJSONObject: object, options: .sortedKeys))
         disabled = object["disabled"] as? Bool ?? false
         let strings = { (key: String) -> [String: String] in
             (object[key] as? [String: Any] ?? [:]).compactMapValues { $0 as? String ?? ($0 as? NSNumber)?.stringValue }

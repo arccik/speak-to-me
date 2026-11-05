@@ -35,6 +35,8 @@ final class VoiceSession {
         var interrupted = false
         /// Small print under the message: tools used, screen shared.
         var note: String?
+        /// Optional so conversations saved before action history still decode.
+        var toolActions: [ToolAction]? = nil
     }
 
     struct VisionUnavailable: LocalizedError {
@@ -106,7 +108,13 @@ final class VoiceSession {
     /// Reply in whatever language you speak (detected per message).
     var matchLanguage = StoredSetting.value("matchLanguage", default: true) { didSet { StoredSetting.store(matchLanguage, "matchLanguage") } }
     /// Let the model search the web, check the time and open apps/pages.
-    var useTools = StoredSetting.value("useTools", default: true) { didSet { StoredSetting.store(useTools, "useTools") } }
+    var useTools = StoredSetting.value("useTools", default: true) {
+        didSet {
+            StoredSetting.store(useTools, "useTools")
+            ToolHub.shared.enabled = useTools
+            if !useTools { answerApproval(false) }
+        }
+    }
     var soundCues = StoredSetting.value("soundCues", default: true) { didSet { StoredSetting.store(soundCues, "soundCues") } }
     /// Talk over replies without headphones. macOS turns down other apps' audio
     /// (YouTube, music) while it's active, so it's only on while a reply is under way.
@@ -252,8 +260,15 @@ final class VoiceSession {
     }
 
     func askApproval(for call: OMLXClient.ToolCall) async -> Bool {
+        await askApproval(details: ToolHub.shared.approvalDetails(call))
+    }
+
+    private func askApproval(for prepared: ToolHub.PreparedCall) async -> Bool {
+        await askApproval(details: (prepared.title, prepared.server, prepared.arguments, prepared.destructive))
+    }
+
+    private func askApproval(details: (title: String, server: String, arguments: String, destructive: Bool)) async -> Bool {
         answerApproval(false)
-        let details = ToolHub.shared.approvalDetails(call)
         let card = Approval(title: details.title, server: details.server, arguments: details.arguments,
                             destructive: details.destructive)
         approval = card
@@ -338,6 +353,7 @@ final class VoiceSession {
     func bootOnce() async {
         guard !booted else { return }
         booted = true
+        ToolHub.shared.enabled = useTools
         ToolHub.shared.startOnce()
         await boot()
     }
@@ -774,6 +790,7 @@ final class VoiceSession {
 
     func stop() {
         liveText = nil
+        stopActions(turn)
         turn?.task?.cancel()
         turn = nil
         listenerTask?.cancel()
@@ -919,6 +936,7 @@ final class VoiceSession {
     }
 
     private func cancelTurn() {
+        stopActions(turn)
         turn?.task?.cancel()
         turn = nil
         audio.stopPlayback()
@@ -1050,6 +1068,7 @@ final class VoiceSession {
     private func interrupt() {
         audio.stopPlayback()
         guard let turn else { return }
+        stopActions(turn)
         turn.task?.cancel()
         if turn.committed, turn.revealed {
             showReply(turn, now: true)
@@ -1090,6 +1109,7 @@ final class VoiceSession {
 
     private func discardDraft() {
         guard let turn, !turn.committed else { return }
+        stopActions(turn)
         turn.task?.cancel()
         self.turn = nil
     }
@@ -1178,13 +1198,14 @@ final class VoiceSession {
         }
 
         var chunker = SentenceChunker()
+        var stoppedTools = Set<String>()
         try await withTaskCancellationHandler {
             do {
                 for round in 0..<4 {
                     var calls: [OMLXClient.ToolCall] = []
                     var roundText = ""
-                    let tools = useTools && round < 3 ? ToolHub.shared.definitions : []
-                    for try await event in client.streamChat(model: modelID, messages: messages, tools: tools) {
+                    let catalog = ToolHub.shared.catalog(available: useTools && round < 3)
+                    for try await event in client.streamChat(model: modelID, messages: messages, tools: catalog.definitions) {
                         try Task.checkCancellation()
                         switch event {
                         case .text(let token):
@@ -1207,28 +1228,55 @@ final class VoiceSession {
                     }
                     messages.append(.init(role: "assistant", content: SentenceChunker.visible(roundText), toolCalls: calls))
                     for call in calls {
-                        // Opening apps or pages can't be undone, so a draft waits until it's the real reply.
-                        while ToolHub.shared.hasSideEffects(call) && !turn.committed {
+                        try Task.checkCancellation()
+                        if stoppedTools.contains(call.name) {
+                            messages.append(.init(role: "tool", content: "This action was denied or its result is uncertain. Do not repeat it in this reply. Ask the user to check the service first.", toolCallID: call.id))
+                            continue
+                        }
+                        let prepared: ToolHub.PreparedCall
+                        do { prepared = try ToolHub.shared.prepare(call, catalog: catalog) }
+                        catch {
+                            let action = ToolAction(title: call.name, server: "Unavailable tool", state: .blocked)
+                            turn.actions.append(action)
+                            syncActions(turn)
+                            messages.append(.init(role: "tool", content: error.localizedDescription, toolCallID: call.id))
+                            continue
+                        }
+                        while prepared.hasSideEffects && !turn.committed {
                             try await Task.sleep(for: .milliseconds(50))
                         }
-                        // Tools that change or delete things wait for your OK. Talking over the
-                        // reply cancels the turn, which counts as a no.
-                        if ToolHub.shared.needsApproval(call) {
+                        try Task.checkCancellation()
+                        let action = ToolAction(title: prepared.title, server: prepared.server,
+                                                state: prepared.needsApproval ? .waiting : .running,
+                                                arguments: ToolAction.privateArguments(prepared.arguments), serverID: prepared.serverID,
+                                                mayChange: prepared.hasSideEffects)
+                        turn.actions.append(action)
+                        syncActions(turn)
+                        var allowed = false
+                        if prepared.needsApproval {
                             if turnLanguage == "en" || !matchLanguage { sentenceSink.yield("I need your OK for that first.") }
-                            let allowed = await askApproval(for: call)
-                            try Task.checkCancellation()
-                            guard allowed else {
-                                turn.notes.append("Didn't run \(ToolHub.shared.approvalDetails(call).title)")
-                                if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
-                                messages.append(.init(role: "tool", content: "The user said no, so this did not run. Don't try it again unless they ask.", toolCallID: call.id))
+                            allowed = await askApproval(for: prepared)
+                            if !allowed {
+                                stoppedTools.insert(call.name)
+                                finishAction(action.id, in: turn, outcome: .init(state: Task.isCancelled ? .cancelled : .denied,
+                                    text: "This action did not run. Don't try again unless the user asks."))
+                                try Task.checkCancellation()
+                                messages.append(.init(role: "tool", content: "Permission wasn't granted. This did not run. Don't try again unless the user asks.", toolCallID: call.id))
                                 continue
                             }
                         }
-                        turn.notes.append(ToolHub.shared.label(for: call))
-                        if let i = turn.lineIndex, lines.indices.contains(i) { lines[i].note = turn.notes.joined(separator: " · ") }
-                        let result = await ToolHub.shared.run(call, client: client)
                         try Task.checkCancellation()
-                        messages.append(.init(role: "tool", content: result, toolCallID: call.id))
+                        if let i = turn.actions.firstIndex(where: { $0.id == action.id }) {
+                            turn.actions[i].state = .running
+                            turn.actions[i].started = Date()
+                        }
+                        syncActions(turn)
+                        let outcome = await ToolHub.shared.run(prepared, approved: allowed, client: client)
+                        if prepared.hasSideEffects && outcome.state != .succeeded { stoppedTools.insert(call.name) }
+                        finishAction(action.id, in: turn, outcome: outcome)
+                        try Task.checkCancellation()
+                        let caution = outcome.state == .unknown ? " Do not retry this action unless the user explicitly asks." : ""
+                        messages.append(.init(role: "tool", content: outcome.text + caution, toolCallID: call.id))
                     }
                 }
                 for sentence in chunker.finish() { sentenceSink.yield(sentence) }
@@ -1282,14 +1330,47 @@ final class VoiceSession {
         if turn.sharedScreen { attachScreenNext = false }
         history.append(.init(role: "user", content: turn.sharedScreen ? text + " [screenshot attached]" : text))
         lines.append(Line(role: "assistant", text: SentenceChunker.visible(turn.reply),
-                          note: turn.notes.isEmpty ? nil : turn.notes.joined(separator: " · ")))
+                          note: turn.notes.isEmpty ? nil : turn.notes.joined(separator: " · "), toolActions: turn.actions))
         turn.lineIndex = lines.count - 1
+        turn.lineID = lines.last?.id
         if let failure = turn.failure {
             lines.append(Line(role: "error", text: failure.localizedDescription))
         }
         phase = .thinking
         for samples in turn.heldAudio { play(samples, for: turn) }
         turn.heldAudio.removeAll()
+    }
+
+    private func syncActions(_ turn: Turn) {
+        guard let id = turn.lineID, let i = lines.firstIndex(where: { $0.id == id }) else { return }
+        lines[i].toolActions = turn.actions
+    }
+
+    private func finishAction(_ id: UUID, in turn: Turn, outcome: ToolOutcome) {
+        guard let i = turn.actions.firstIndex(where: { $0.id == id }) else { return }
+        turn.actions[i].state = outcome.state
+        turn.actions[i].finished = Date()
+        // Tool payloads may contain private data. Do not write them to chat files.
+        turn.actions[i].result = outcome.text
+        syncActions(turn)
+        if turn.revealed, lines.contains(where: { $0.id == turn.lineID }) { saveConversation() }
+    }
+
+    private func stopActions(_ turn: Turn?) {
+        guard let turn else { return }
+        for i in turn.actions.indices {
+            if turn.actions[i].state == .running {
+                turn.actions[i].state = turn.actions[i].mayChange ? .unknown : .cancelled
+                turn.actions[i].finished = Date()
+                turn.actions[i].result = turn.actions[i].mayChange
+                    ? "The action may have completed. Check the service before trying again." : "The reply was stopped."
+            } else if turn.actions[i].state == .waiting {
+                turn.actions[i].state = .cancelled
+                turn.actions[i].finished = Date()
+                turn.actions[i].result = "Cancelled before starting. Nothing ran."
+            }
+        }
+        syncActions(turn)
     }
 
     private func play(_ samples: [Float], for turn: Turn) {
@@ -1339,6 +1420,8 @@ private final class Turn {
     var reply = ""
     var heldAudio: [[Float]] = []
     var lineIndex: Int?
+    var lineID: UUID?
+    var actions: [ToolAction] = []
     var generating = true
     var revealed = false
     var finalized = false
@@ -1372,7 +1455,8 @@ private enum StoredSetting {
         UserDefaults.standard.object(forKey: key) as? T ?? value
     }
 
-    static func store<T>(_ value: T, _ key: String) {
+    @MainActor static func store<T>(_ value: T, _ key: String) {
+        guard !Snapshots.isRendering else { return }
         UserDefaults.standard.set(value, forKey: key)
     }
 }

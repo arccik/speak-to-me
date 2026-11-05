@@ -7,11 +7,35 @@ import Network
 /// HTTP server on a free port), set up in a temporary folder like a real mcp.json
 /// and Plugins folder.
 enum MCPSelfTest {
+    actor FixtureTransport: MCP.Transport {
+        enum Mode { case repeatedCursor, tooManyTools, duplicateNames, tooManyPages, tooMuchMetadata }
+        let mode: Mode
+        private(set) var requests = 0
+        init(mode: Mode) { self.mode = mode }
+        func start() async throws {}
+        func close() async {}
+        func notify(_ message: [String: Any]) async throws {}
+        func request(_ message: [String: Any], id: Int, timeout: TimeInterval) async throws -> [String: Any] {
+            requests += 1
+            let tool: [String: Any] = ["name": "example", "inputSchema": ["type": "object"]]
+            let result: [String: Any]
+            switch mode {
+            case .repeatedCursor: result = ["tools": [Any](), "nextCursor": "same"]
+            case .tooManyTools: result = ["tools": Array(repeating: tool, count: 501)]
+            case .duplicateNames: result = ["tools": [tool, tool]]
+            case .tooManyPages: result = ["tools": [Any](), "nextCursor": "page-\(requests)"]
+            case .tooMuchMetadata:
+                result = ["tools": [["name": "tool\(requests)", "description": String(repeating: "x", count: 1_048_576)]], "nextCursor": "page-\(requests)"]
+            }
+            return ["jsonrpc": "2.0", "id": id, "result": result]
+        }
+    }
     // MARK: The test servers
 
     /// A stdio MCP server with a few tools, run as `SpeakToMe --mcp-test-server`.
     static func runStdioServer() -> Never {
         setvbuf(stdout, nil, _IOLBF, 0)
+        var changedSchema = false
         while let line = readLine() {
             guard let message = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
             if message["method"] as? String == "tools/call",
@@ -22,7 +46,21 @@ enum MCPSelfTest {
             // A notification first, which the client should ignore.
             if message["method"] as? String == "tools/call" { send(["jsonrpc": "2.0", "method": "notifications/message",
                                                                    "params": ["level": "info", "data": "working"]]) }
-            if let reply = answer(message) { send(reply) }
+            if (message["params"] as? [String: Any])?["name"] as? String == "note",
+               ((message["params"] as? [String: Any])?["arguments"] as? [String: Any])?["changeSchema"] as? Bool == true {
+                changedSchema = true
+                send(["jsonrpc": "2.0", "method": "notifications/tools/list_changed"])
+            }
+            if var reply = answer(message) {
+                if changedSchema, message["method"] as? String == "tools/list",
+                   var result = reply["result"] as? [String: Any], var tools = result["tools"] as? [[String: Any]], !tools.isEmpty {
+                    tools[0]["description"] = "Updated echo tool"
+                    tools[0]["inputSchema"] = ["type": "object", "properties": ["text": ["type": "string"], "scope": ["type": "string"]]]
+                    result["tools"] = tools
+                    reply["result"] = result
+                }
+                send(reply)
+            }
         }
         exit(0)
     }
@@ -84,7 +122,14 @@ enum MCPSelfTest {
     final class HTTPServer: @unchecked Sendable {
         private let listener: NWListener
         private let queue = DispatchQueue(label: "mcp-test-http")
-        private(set) var sawMissingSession = false
+        private var missingSession = false
+        private var expireNext = false
+        private var attempts = 0
+        private var initializations = 0
+        var sawMissingSession: Bool { queue.sync { missingSession } }
+        var toolAttempts: Int { queue.sync { attempts } }
+        var initializationCount: Int { queue.sync { initializations } }
+        func expireSession() { queue.sync { expireNext = true } }
 
         init() throws {
             listener = try NWListener(using: .tcp, on: .any)
@@ -145,8 +190,13 @@ enum MCPSelfTest {
                 return send("400 Bad Request", [:], "")
             }
             let method = message["method"] as? String
+            if method == "initialize" { initializations += 1 }
+            if method == "tools/call" {
+                attempts += 1
+                if expireNext { expireNext = false; return send("404 Not Found", [:], "expired") }
+            }
             if method != "initialize" && request.headers["mcp-session-id"] != "test-session" {
-                sawMissingSession = true
+                missingSession = true
                 return send("400 Bad Request", [:], "missing session")
             }
             guard let reply = MCPSelfTest.answer(message) else { return send("202 Accepted", [:], "") }
@@ -190,8 +240,11 @@ enum MCPSelfTest {
 
     @MainActor
     static func run() async {
+        setvbuf(stdout, nil, _IOLBF, 0)
         var failures = 0
+        var checks = 0
         func check(_ name: String, _ ok: Bool, _ detail: @autoclosure () -> String = "") {
+            checks += 1
             print("\(ok ? "PASS" : "FAIL")  \(name)\(ok ? "" : "  — \(detail())")")
             if !ok { failures += 1 }
         }
@@ -257,10 +310,33 @@ enum MCPSelfTest {
         check("built-in tools come first", names().first == "web_search")
         check("tools are named server__tool", names().contains("local__echo") && names().contains("remote__add"), "\(names())")
 
-        check("local tool call", await hub.run(call("local__echo", #"{"text":"hi"}"#), client: client) == "echo: hi")
-        check("remote tool call (session id kept)", await hub.run(call("remote__add", #"{"a":2,"b":3}"#), client: client) == "5.0")
+        // Test code grants explicit one-call approval, just as the UI does.
+        func execute(_ request: OMLXClient.ToolCall, approved: Bool = true) async -> ToolOutcome {
+            do { return await hub.run(try hub.prepare(request, catalog: hub.catalog()), approved: approved, client: client) }
+            catch { return .init(state: .blocked, text: error.localizedDescription) }
+        }
+        check("read-only claims require explicit trust", hub.needsApproval(call("local__echo")))
+        check("untrusted reads wait for the real reply", hub.hasSideEffects(call("local__echo")))
+        check("dispatcher rejects missing permission", await execute(call("local__note"), approved: false).state == .blocked)
+        hub.setTrusted(server: "mcp:local", tool: "echo", trusted: true)
+
+        check("local tool call", await execute(call("local__echo", #"{"text":"hi"}"#)).text == "echo: hi")
+        check("remote tool call (session id kept)", await execute(call("remote__add", #"{"a":2,"b":3}"#)).text == "5.0")
         check("remote server always got its session id", !http.sawMissingSession)
-        check("a failing tool says so", await hub.run(call("local__fail"), client: client).hasPrefix("The tool failed"))
+        let attemptsBeforeExpiry = http.toolAttempts
+        let handshakesBeforeExpiry = http.initializationCount
+        http.expireSession()
+        let expiredOutcome = await execute(call("remote__note"))
+        check("expired write session has an uncertain outcome", expiredOutcome.state == .unknown)
+        await waitFor("expired session reconnect") { server("remote")?.status == .running && http.initializationCount > handshakesBeforeExpiry }
+        check("expired session reconnects with a handshake", http.initializationCount > handshakesBeforeExpiry)
+        check("reconnect does not replay the write", http.toolAttempts == attemptsBeforeExpiry + 1)
+        let cancelledPrepared = try! hub.prepare(call("remote__note"), catalog: hub.catalog())
+        let attemptsBeforeCancel = http.toolAttempts
+        let cancelledDispatch = Task { await hub.run(cancelledPrepared, approved: true, client: client) }
+        cancelledDispatch.cancel()
+        check("cancelled-before-start actions do not dispatch", await cancelledDispatch.value.state == .cancelled && http.toolAttempts == attemptsBeforeCancel)
+        check("a failing tool says so", await execute(call("local__fail")).state == .failed)
         check("read-only tools may run in drafts", !hub.hasSideEffects(call("local__echo")))
         check("other tools wait for the real reply", hub.hasSideEffects(call("local__add")))
         check("built-in side effects are unchanged", hub.hasSideEffects(call("open_app")) && !hub.hasSideEffects(call("get_time")))
@@ -272,7 +348,7 @@ enum MCPSelfTest {
         check("you can let a non-deleting tool run without asking", !hub.needsApproval(call("local__note")))
         check("a tool that may delete asks however it's set", hub.needsApproval(call("local__add")))
         check("built-in tools never ask", !hub.needsApproval(call("open_url")) && !hub.needsApproval(call("web_search")))
-        check("the app's environment isn't passed on", await hub.run(call("local__secret"), client: client) == "unset")
+        check("the app's environment isn't passed on", await execute(call("local__secret")).text == "unset")
         check("labels use the tool's title", hub.label(for: call("local__add")) == "Used Add numbers (local)",
               hub.label(for: call("local__add")))
 
@@ -281,6 +357,39 @@ enum MCPSelfTest {
         hub.setTool(server: "mcp:local", tool: "add", on: true)
         hub.setTool(server: "builtin", tool: "open_app", on: false)
         check("a built-in tool can be switched off", !names().contains("open_app"))
+
+        hub.setTool(server: "builtin", tool: "get_time", on: false)
+        check("disabled built-ins cannot execute", await execute(call("get_time")).state == .blocked)
+        hub.setTool(server: "builtin", tool: "get_time", on: true)
+        check("invented tools cannot execute", await execute(call("invented")).state == .blocked)
+        check("malformed arguments cannot become an empty object", await execute(call("local__note", "oops")).state == .blocked)
+        check("an empty catalog rejects model calls", (try? hub.prepare(call("get_time"), catalog: hub.catalog(available: false))) == nil)
+        let globalPending = try! hub.prepare(call("get_time"), catalog: hub.catalog())
+        hub.enabled = false
+        check("global tools switch blocks already-prepared calls", await hub.run(globalPending, client: client).state == .blocked)
+        hub.enabled = true
+        let pending = try! hub.prepare(call("local__note"), catalog: hub.catalog())
+        hub.restart("mcp:local")
+        await waitFor("restarted identity") { server("local")?.status == .running }
+        check("restart invalidates a pending approval", await hub.run(pending, approved: true, client: client).state == .blocked)
+        let longArguments = String(decoding: try! JSONSerialization.data(withJSONObject: ["body": String(repeating: "a", count: 2000), "destination": "visible-destination"]), as: UTF8.self)
+        check("approval keeps arguments beyond 1500 characters", hub.approvalDetails(call("local__note", longArguments)).arguments.contains("visible-destination"))
+        hub.setTrusted(server: "mcp:local", tool: "note", trusted: true)
+        try! hub.addServer(name: "local", spec: ["command": me, "args": ["--mcp-test-server"], "env": ["CHANGED": "1"]])
+        await waitFor("changed configuration") { server("local")?.status == .running }
+        check("changed server config revokes tool trust", hub.needsApproval(call("local__note")))
+        let trustedBefore = try! hub.prepare(call("local__echo"), catalog: hub.catalog())
+        hub.setTrusted(server: "mcp:local", tool: "echo", trusted: false)
+        check("permission changes invalidate pending calls", !hub.isCurrent(trustedBefore))
+        hub.setTrusted(server: "mcp:local", tool: "echo", trusted: true)
+        let catalogBeforeSchema = hub.catalog()
+        let approvalBeforeSchema = try! hub.prepare(call("local__echo"), catalog: catalogBeforeSchema)
+        _ = await execute(call("local__note", #"{"changeSchema":true}"#))
+        await waitFor("tool-list notification") { server("local")?.tools.first?.description == "Updated echo tool" }
+        check("tool-list notifications refresh definitions", server("local")?.tools.first?.description == "Updated echo tool")
+        check("changed schemas revoke automatic execution", hub.needsApproval(call("local__echo")))
+        check("changed definitions invalidate old catalogs", (try? hub.prepare(call("local__echo"), catalog: catalogBeforeSchema)) == nil)
+        check("changed definitions invalidate prepared calls", await hub.run(approvalBeforeSchema, approved: true, client: client).state == .blocked)
 
         let demo = hub.plugins.first { $0.id == "demo" }
         check("plugin.json is read", demo?.name == "Demo" && demo?.problem == nil)
@@ -291,9 +400,9 @@ enum MCPSelfTest {
         check("plugin instructions join the prompt", hub.instructions == "Use the demo tools for demos.")
         check("plugin labels and fillers are spoken", hub.label(for: call("demo__echo")) == "Echoed it"
               && hub.filler(for: call("demo__echo")) == "One moment.")
-        check("a plugin can mark a tool read-only for drafts", !hub.hasSideEffects(call("demo__add")))
+        check("a plugin hint cannot put an untrusted write in a draft", hub.hasSideEffects(call("demo__add")))
         check("but can't skip asking", hub.needsApproval(call("demo__add")))
-        let whereResult = await hub.run(call("demo__where"), client: client)
+        let whereResult = await execute(call("demo__where")).text
         check("${PLUGIN_DIR} is filled in", whereResult == pluginDir.path, whereResult)
 
         if let local = server("local") { hub.setServer(local, on: false) }
@@ -302,7 +411,7 @@ enum MCPSelfTest {
         await waitFor("restart") { server("local")?.status == .running }
         check("switching it back on starts it again", server("local")?.status == .running)
 
-        _ = await hub.run(call("local__quit"), client: client)
+        check("a lost write response reports an unknown outcome", await execute(call("local__quit")).state == .unknown)
         await waitFor("exit") { if case .failed = server("local")?.status { return true }; return false }
         check("a server that quits is shown with its last words", {
             if case .failed(let message) = server("local")?.status { return message.contains("quitting as asked") }
@@ -329,6 +438,55 @@ enum MCPSelfTest {
 
         check("command lines split like a shell", ShellPath.words(#"npx -y "a b" c\ d 'e "f"'"#) == ["npx", "-y", "a b", "c d", #"e "f""#])
         check("long names fit the 64-character limit", ToolHub.qualifiedName(String(repeating: "s", count: 40), String(repeating: "t", count: 40)).count == 64)
+
+        let longPrefix = String(repeating: "s", count: 64)
+        check("long-prefix tool names stay distinct", ToolHub.qualifiedName(longPrefix, "read") != ToolHub.qualifiedName(longPrefix, "delete"))
+        check("sanitized tool names stay distinct", ToolHub.qualifiedName("local", "a.b") != ToolHub.qualifiedName("local", "a_b"))
+        check("separator boundaries stay distinct", ToolHub.qualifiedName("a__b", "c") != ToolHub.qualifiedName("a", "b__c"))
+        let repeated = FixtureTransport(mode: .repeatedCursor)
+        do { _ = try await MCP.Connection(transport: repeated).listTools(); check("repeated cursors fail", false) }
+        catch { check("repeated cursors fail promptly", await repeated.requests == 2) }
+        for mode: FixtureTransport.Mode in [.tooManyTools, .duplicateNames, .tooManyPages, .tooMuchMetadata] {
+            do { _ = try await MCP.Connection(transport: FixtureTransport(mode: mode)).listTools(); check("invalid discovery \(mode) fails", false) }
+            catch { check("invalid discovery \(mode) fails", true) }
+        }
+        var framer = MCP.LineFramer()
+        let large = Data(repeating: 65, count: MCP.messageLimit + 1)
+        do { _ = try framer.append(large + Data([10])); check("oversized completed frame refused", false) }
+        catch { check("oversized completed frame refused", true) }
+        framer = MCP.LineFramer()
+        do { _ = try framer.append(Data([10]) + large); check("oversized tail after newline refused", false) }
+        catch { check("oversized tail after newline refused", true) }
+        var sse = MCP.EventDecoder()
+        var decoded: [String: Any]?
+        for byte in Data("data: {\r\ndata: \"jsonrpc\": \"2.0\", \"id\": 7,\r\ndata: \"result\": {}}\r\n\r\n".utf8) {
+            do { if let message = try sse.push(byte) { decoded = message } } catch { break }
+        }
+        check("SSE multi-line data and CRLF decode", MCP.messageID(decoded ?? [:]) == 7)
+        sse = MCP.EventDecoder()
+        do { for byte in large { _ = try sse.push(byte) }; check("SSE unterminated line bounded", false) }
+        catch { check("SSE unterminated line bounded", true) }
+
+        let sleeper = MCP.StdioTransport(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["30"], environment: [:], directory: nil, onExit: { _ in }, onToolsChanged: {})
+        try! await sleeper.start()
+        let request = Task { try await sleeper.request(["jsonrpc": "2.0", "id": 1, "method": "tools/call"], id: 1, timeout: 20) }
+        try? await Task.sleep(for: .milliseconds(50))
+        let cancelTime = Date()
+        request.cancel()
+        do { _ = try await request.value; check("stdio cancellation throws", false) }
+        catch { check("stdio cancellation is prompt", error is CancellationError && Date().timeIntervalSince(cancelTime) < 1) }
+        await sleeper.close()
+
+        var action = ToolAction(title: "Note", server: "Local", state: .running, arguments: "private-payload")
+        action.result = "private-result"
+        let actionData = try! JSONEncoder().encode(action)
+        let actionJSON = String(decoding: actionData, as: UTF8.self)
+        check("saved action history omits payloads", !actionJSON.contains("private-payload") && !actionJSON.contains("private-result"))
+        check("unfinished actions restore as unknown", (try? JSONDecoder().decode(ToolAction.self, from: actionData).state) == .unknown)
+        let privateArgs = ToolAction.privateArguments(#"{"nested":{"api_key":"secret-value"},"destination":"visible"}"#)
+        check("credential fields are redacted in history", !privateArgs.contains("secret-value") && privateArgs.contains("visible"))
+        let legacyLine = Data(#"{"id":"00000000-0000-0000-0000-000000000001","role":"assistant","text":"old chat","interrupted":false}"#.utf8)
+        check("old conversation lines still decode", (try? JSONDecoder().decode(VoiceSession.Line.self, from: legacyLine)) != nil)
 
         // The approval card: yes, no, talking over it (the turn is cancelled), and a newer one.
         _ = NSApplication.shared
@@ -359,7 +517,7 @@ enum MCPSelfTest {
         hub.reload()
         ChildProcesses.terminateAll()
         http.stop()
-        print(failures == 0 ? "\nAll MCP checks passed." : "\n\(failures) MCP check(s) failed.")
+        print(failures == 0 ? "\nAll \(checks) MCP checks passed." : "\n\(failures) of \(checks) MCP checks failed.")
         exit(failures == 0 ? 0 : 1)
     }
 }

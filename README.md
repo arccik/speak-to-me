@@ -133,7 +133,7 @@ Commands are found through your login shell's `PATH`, so `npx`, `uvx` and Homebr
   "instructions": "Use the calendar tools when the user asks about their day.",
   "mcpServers": { "calendar": { "command": "${PLUGIN_DIR}/calendar-server" } },
   "speech": {
-    "list_events": { "label": "Checked your calendar", "filler": "Let me look at your calendar.", "readOnly": true }
+    "list_events": { "label": "Checked your calendar", "filler": "Let me look at your calendar." }
   }
 }
 ```
@@ -143,16 +143,20 @@ Commands are found through your login shell's `PATH`, so `npx`, `uvx` and Homebr
 **Safety.**
 
 - **Built-in tools can't change your files.** They can only search, read web pages, tell the time, and open apps or http(s) links.
-- **MCP tools that change things ask first.** Before such a tool runs, a card in the window shows exactly what it will do, and it waits for **Allow**. Talking over it, or no answer in 2 minutes, counts as no.
+- **MCP tools ask first by default.** Before a tool runs, a card shows its actual tool name, server and full arguments, and waits for **Allow**. Talking over it, or no answer in 2 minutes, counts as no.
 - **Tools that may delete or overwrite ask every time.** MCP treats every tool this way unless its server says otherwise, and this can't be switched off.
-- **Only tools whose own server says they only read run without asking.**
-- **Plugins stay off until you switch them on.** A plugin turns itself off again if its files change.
+- **Read-only claims need your trust.** MCP tools ask first until you explicitly turn off asking for that tool in Settings → Tools. Tools marked as potentially destructive always ask. Permission grants reset when the server configuration or tool definition changes.
+- **Plugins stay off until you switch them on.** On Reload, changes to `plugin.json` or `instructions.md` turn the plugin off. Executables and their dependencies are not verified; only enable plugins you trust.
 - **Programs you add get only a minimal environment.** Remote servers must use https unless they're on this Mac.
 - **Only add servers you trust.** A program you add runs with your permissions.
 
+**Action history.** Under a reply, expand **Action** or **Actions** to see which tools ran, their status and timing, and inspect arguments and results. The history distinguishes waiting for permission, running, succeeded, failed, denied, cancelled and outcome unknown. Arguments and results stay in memory for the current session; saved chats retain only action identity, timing and status. Common credential fields are redacted in the history, while approval shows the exact arguments.
+
+Stopping a reply sends a best-effort cancellation. An external action may already have completed; in that case check its service before trying again. **Reconnect server** reconnects without repeating the action. Expired remote sessions also reconnect without replaying the failed call. Turning tools off blocks dispatch, including calls already waiting for approval.
+
 **Good to know:**
 
-- **Drafts.** Replies are drafted before you finish talking, and a draft may be thrown away. So a tool only runs in a draft if its server or plugin marks it read-only. Every other tool waits until the reply is real. A plugin's `readOnly` only affects drafts. It never skips asking you.
+- **Drafts.** Replies are drafted before you finish talking, and a draft may be thrown away. An MCP tool only runs in a draft if its server marks it read-only and you explicitly trust that claim. Plugin speech hints cannot bypass this. Other tools wait until the reply is real.
 - **How many tools.** Small local models pick the wrong tool more often when they have many to choose from, and every tool makes replies a little slower to start. Settings warns you past 20.
 - **Checking your setup.** `SpeakToMe --mcplist` starts your servers and prints their tools, or why each one failed.
 

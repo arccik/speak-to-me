@@ -48,25 +48,29 @@ enum Tools {
         call.name == "open_app" || call.name == "open_url"
     }
 
-    static func run(_ call: OMLXClient.ToolCall, client: OMLXClient) async -> String {
+    static func runOutcome(_ call: OMLXClient.ToolCall, client: OMLXClient) async -> ToolOutcome {
         let args = arguments(call)
-        switch call.name {
-        case "web_search":
-            return await client.webSearch(args["query"] as? String ?? "")
-        case "fetch_url":
-            return await client.fetchPage(args["url"] as? String ?? "")
-        case "get_time":
-            let now = Date()
-            return "\(now.formatted(date: .complete, time: .shortened)), time zone \(TimeZone.current.identifier)"
-        case "open_app":
-            return await openApp(args["name"] as? String ?? "")
-        case "open_url":
-            guard let url = URL(string: args["url"] as? String ?? ""), ["http", "https"].contains(url.scheme ?? "")
-            else { return "That isn't a web address I can open." }
-            await MainActor.run { _ = NSWorkspace.shared.open(url) }
-            return "Opened \(url.absoluteString)"
-        default:
-            return "Unknown tool \(call.name)"
+        do {
+            try Task.checkCancellation()
+            let text: String
+            switch call.name {
+            case "web_search": text = try await client.toolWebSearch(args["query"] as? String ?? "")
+            case "fetch_url": text = try await client.toolFetchPage(args["url"] as? String ?? "")
+            case "get_time": text = "\(Date().formatted(date: .complete, time: .shortened)), time zone \(TimeZone.current.identifier)"
+            case "open_app": text = try await openApp(args["name"] as? String ?? "")
+            case "open_url":
+                guard let url = URL(string: args["url"] as? String ?? ""), ["http", "https"].contains(url.scheme ?? ""), url.host != nil else {
+                    throw MCP.Failure.server("That isn't a web address I can open.")
+                }
+                let opened = await MainActor.run { NSWorkspace.shared.open(url) }
+                guard opened else { throw MCP.Failure.server("macOS couldn't open that page.") }
+                text = "Opened \(url.absoluteString)"
+            default: return .init(state: .blocked, text: "Unknown tool. Nothing ran.")
+            }
+            return .init(state: .succeeded, text: text)
+        } catch {
+            return .init(state: Task.isCancelled ? (hasSideEffects(call) ? .unknown : .cancelled) : .failed,
+                         text: Task.isCancelled ? "The reply was stopped." : error.localizedDescription)
         }
     }
 
@@ -74,8 +78,9 @@ enum Tools {
         (try? JSONSerialization.jsonObject(with: Data(call.arguments.utf8)) as? [String: Any]) ?? [:]
     }
 
-    private static func openApp(_ name: String) async -> String {
+    private static func openApp(_ name: String) async throws -> String {
         let wanted = name.lowercased().replacingOccurrences(of: ".app", with: "")
+        guard !wanted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MCP.Failure.server("An app name is required.") }
         let folders = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
                        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications").path]
         for folder in folders {
@@ -84,18 +89,19 @@ enum Tools {
                 ?? apps.first(where: { $0.lowercased().hasPrefix(wanted) && $0.hasSuffix(".app") }) {
                 let url = URL(fileURLWithPath: folder).appendingPathComponent(match)
                 let config = NSWorkspace.OpenConfiguration()
-                _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: config)
+                _ = try await NSWorkspace.shared.openApplication(at: url, configuration: config)
                 return "Opened \(match.replacingOccurrences(of: ".app", with: ""))"
             }
         }
-        return "I couldn't find an app called \(name)."
+        throw MCP.Failure.server("I couldn't find an app called \(name).")
     }
 }
 
 extension OMLXClient {
     /// oMLX's built-in web search (DuckDuckGo by default; configurable in oMLX).
-    func webSearch(_ query: String) async -> String {
-        guard let json = await postJSON("v1/web/search", ["query": query]) else { return "Search failed." }
+    func toolWebSearch(_ query: String) async throws -> String {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MCP.Failure.server("A search query is required.") }
+        let json = try await toolPostJSON("v1/web/search", ["query": query])
         let results = json["results"] as? [[String: Any]] ?? []
         guard !results.isEmpty else { return (json["error"] as? String) ?? "No results." }
         return results.prefix(5).enumerated().map { i, r in
@@ -103,20 +109,28 @@ extension OMLXClient {
         }.joined(separator: "\n")
     }
 
-    func fetchPage(_ url: String) async -> String {
-        guard let json = await postJSON("v1/web/fetch", ["url": url]) else { return "Couldn't open that page." }
+    func toolFetchPage(_ url: String) async throws -> String {
+        guard let parsed = URL(string: url), ["http", "https"].contains(parsed.scheme ?? ""), parsed.host != nil else {
+            throw MCP.Failure.server("A valid http or https page address is required.")
+        }
+        let json = try await toolPostJSON("v1/web/fetch", ["url": url])
         let text = (json["content"] ?? json["text"] ?? json["markdown"]) as? String ?? (json["error"] as? String ?? "Empty page.")
         return String(text.prefix(4_000))
     }
 
-    private func postJSON(_ path: String, _ body: [String: Any]) async -> [String: Any]? {
+    private func toolPostJSON(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         if let apiKey { request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization") }
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (data, _) = try? await URLSession.shared.data(for: request) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { throw MCP.Failure.server("The web request failed.") }
+        var data = Data()
+        for try await byte in bytes { data.append(byte); if data.count > MCP.messageLimit { throw MCP.Failure.server("The web reply was too large.") } }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MCP.Failure.badReply }
+        if let error = json["error"] as? String { throw MCP.Failure.server(error) }
+        return json
     }
 }

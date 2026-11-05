@@ -62,7 +62,43 @@ enum Snapshots {
         }
         renderPuck(to: dir)
         renderMouths(to: dir)
-        renderSettings(to: dir)
+        renderToolActions(to: dir)
+    }
+
+    private static func renderToolActions(to dir: URL) {
+        let samples: [(CGFloat, ToolAction.State)] = [CGFloat(360), CGFloat(480)].flatMap { width in
+            [ToolAction.State.waiting, .running, .succeeded, .failed, .unknown].map { (width, $0) }
+        }
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 480, height: 400),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        func capture(_ index: Int) {
+            guard index < samples.count else { window.close(); renderSettings(to: dir); return }
+            let (width, state) = samples[index]
+            var action = ToolAction(title: "Create calendar appointment", server: "Calendar", state: state,
+                arguments: "{\n  \"title\": \"Discuss the project\",\n  \"date\": \"2026-11-06\"\n}")
+            action.started = Date().addingTimeInterval(-3)
+            if state != .running && state != .waiting { action.finished = Date() }
+            action.result = state == .failed ? "The service refused the request. Check your account permissions." : nil
+            let view = ActionHistory(actions: [action], initiallyExpanded: true)
+                .padding(22).frame(width: width, height: 400, alignment: .topLeading)
+                .background(Theme.abyss).preferredColorScheme(.dark)
+            window.setContentSize(NSSize(width: width, height: 400))
+            window.contentView = NSHostingView(rootView: view)
+            window.orderFrontRegardless()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                MainActor.assumeIsolated {
+                    if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                        view.cacheDisplay(in: view.bounds, to: rep)
+                        try? rep.representation(using: .png, properties: [:])?
+                            .write(to: dir.appendingPathComponent("tools-\(state.rawValue)-\(Int(width)).png"))
+                    }
+                    capture(index + 1)
+                }
+            }
+        }
+        capture(0)
     }
 
     /// A few seconds of syllables, so the ripples look the way they do mid-sentence.

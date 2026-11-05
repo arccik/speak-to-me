@@ -77,6 +77,10 @@ struct ContentView: View {
                             }
                         }
                         .transition(.opacity)
+                        if let actions = session.lines.last(where: { $0.role == "assistant" })?.toolActions, !actions.isEmpty {
+                            ActionHistory(actions: actions)
+                                .frame(maxHeight: 180)
+                        }
                         Dock()
                     }
                     .padding(.horizontal, 22)
@@ -711,6 +715,7 @@ private struct MessageRow: View {
                     ReplyText(text: line.text, isLive: isLive, interrupted: line.interrupted)
                 }
                 if let note = line.note { NoteLabel(text: note, systemImage: "wrench.and.screwdriver") }
+                if let actions = line.toolActions, !actions.isEmpty { ActionHistory(actions: actions) }
                 if line.interrupted {
                     Label("You cut in here", systemImage: "scissors")
                         .font(.display(12, weight: .bold))
@@ -749,6 +754,95 @@ private struct MessageRow: View {
         Label(line.text, systemImage: "exclamationmark.triangle.fill")
             .font(.display(14, weight: .bold, for: line.text))
             .foregroundStyle(Theme.acid)
+    }
+}
+
+/// Quiet until expanded. Details stay in memory; saved conversations keep status
+/// and timing only. Reconnecting a server never repeats the action.
+struct ActionHistory: View {
+    let actions: [ToolAction]
+    @State private var expanded = false
+
+    init(actions: [ToolAction], initiallyExpanded: Bool = false) {
+        self.actions = actions
+        _expanded = State(initialValue: initiallyExpanded)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(actions) { action in ActionHistoryRow(action: action) }
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 240)
+        } label: {
+            let latest = actions.last
+            let attention = actions.filter { [.failed, .unknown, .blocked].contains($0.state) }.count
+            let status = actions.count > 1 && attention > 0 ? "\(attention) need attention" : latest?.state.label ?? ""
+            Label("\(actions.count == 1 ? "Action" : "\(actions.count) actions") · \(status)",
+                  systemImage: attention > 0 ? "exclamationmark.circle" : latest?.state.symbol ?? "wrench.and.screwdriver")
+                .font(.display(12))
+        }
+        .foregroundStyle(Theme.text)
+        .accessibilityHint("Expand to inspect tool status and details")
+    }
+}
+
+private struct ActionHistoryRow: View {
+    let action: ToolAction
+    @State private var details = Snapshots.isRendering
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(action.state.label, systemImage: action.state.symbol)
+                Spacer(minLength: 8)
+                if action.state == .running {
+                    TimelineView(.periodic(from: action.started, by: 1)) { context in
+                        elapsed(until: context.date)
+                    }
+                } else if let finished = action.finished {
+                    elapsed(until: finished)
+                }
+            }
+            .font(.display(12))
+            Text("\(action.title) · \(action.server)")
+                .font(.display(13, for: action.title + action.server))
+                .fixedSize(horizontal: false, vertical: true)
+            if action.state == .unknown {
+                Text("This action may have completed. Check the service before trying again.")
+                    .font(.display(12))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            DisclosureGroup("Details", isExpanded: $details) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let arguments = action.arguments {
+                        Text(arguments).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                    }
+                    if let result = action.result {
+                        Text(result).font(.display(12, for: result)).textSelection(.enabled)
+                    }
+                    Text("Arguments and results aren’t saved with conversations. Credential fields are hidden here.")
+                        .font(.display(12))
+                    if let id = action.serverID, action.state == .failed || action.state == .unknown {
+                        Button("Reconnect server") { ToolHub.shared.restart(id) }
+                            .help("Reconnect without repeating this action")
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            }
+            .font(.display(12))
+        }
+        .foregroundStyle(Theme.text)
+    }
+
+    private func elapsed(until date: Date) -> some View {
+        Text(String(format: "%.1f s", max(0, date.timeIntervalSince(action.started))))
+            .monospacedDigit()
     }
 }
 

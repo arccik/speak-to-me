@@ -90,6 +90,7 @@ Everything is in `Sources/SpeakToMe`.
 - `Tools.swift`: the built-in tools: web search, page reading, time, opening apps and pages
 - `ToolHub.swift`: every tool the model sees (built-in, MCP and plugin), their switches, `mcp.json` and `plugin.json`
 - `MCPClient.swift`: a tools-only MCP client over stdio (servers the app launches) and Streamable HTTP
+- `ToolAction.swift`: typed tool outcomes and action-history records; argument/result payloads stay out of saved records
 - `SettingsTools.swift`: Settings → Tools
 - `SentenceChunker.swift`: splits the streamed reply into speakable pieces and strips markdown
 - `ContentView.swift` (window, chat), `SettingsView.swift`, `Visuals.swift`, `FaceEngine.swift`, `FaceRenderer.swift` and `MistControls.swift` (the face: lips from the voice, expression, shader, and the mist behind the controls)
