@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// Settings → Tools: the built-in tools, MCP servers from mcp.json, and plugins.
+/// Everyday tools and external connections have separate settings destinations.
 struct ToolsPane: View {
+    var connections = false
     @Environment(VoiceSession.self) private var session
     private let hub = ToolHub.shared
     @State private var adding = false
@@ -19,70 +20,80 @@ struct ToolsPane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            Section {
-                Toggle("Let it use tools", isOn: $session.useTools)
-            } footer: {
-                Footer(countNote)
-            }
-            .onAppear { if !Snapshots.isRendering { hub.startOnce() } }
+            if !connections {
+                Section {
+                    Toggle("Allow the assistant to use tools", isOn: $session.useTools)
+                } footer: {
+                    Footer(countNote)
+                }
 
-            Section {
-                ForEach(Tools.definitions.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }, id: \.self) { name in
-                    ToolSwitch(serverID: "builtin", tool: name, title: Self.builtInNames[name] ?? name, detail: nil)
-                }
-            } header: {
-                Text("Built-in")
-            }
-            .disabled(!session.useTools)
-
-            Section {
-                let own = hub.servers.filter { $0.plugin == nil }
-                if own.isEmpty {
-                    Text("No servers yet").foregroundStyle(.secondary)
-                }
-                ForEach(own) { server in
-                    ServerRow(server: server, onRemove: { removing = server })
-                }
-                if let error = hub.configError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                }
-                HStack {
-                    Button("Add Server…") { adding = true }
-                    Button("Edit mcp.json") {
-                        hub.ensureConfigFile()
-                        NSWorkspace.shared.open(hub.configURL)
+                Section {
+                    ForEach(Tools.definitions.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }, id: \.self) { name in
+                        ToolSwitch(serverID: "builtin", tool: name, title: Self.builtInNames[name] ?? name, detail: nil)
                     }
-                    Spacer()
-                    Button("Reload") { hub.reload() }
-                        .help("Read mcp.json and the plugins again, and restart every server")
+                } header: {
+                    Text("Built-in")
                 }
-            } header: {
-                Text("MCP servers")
-            } footer: {
-                Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. A tool that can change things asks you in the main window before it runs, and one that may delete or overwrite things asks every time. Read-only claims also ask until you explicitly trust the tool. Changed server settings or tool definitions revoke that trust. Only add servers you trust: a program you add here runs with your permissions. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
-            }
+                .disabled(!session.useTools)
 
-            Section {
-                if hub.plugins.isEmpty {
-                    Text("No plugins installed").foregroundStyle(.secondary)
-                }
-                ForEach(hub.plugins) { plugin in
-                    PluginRow(plugin: plugin)
-                }
-                HStack {
-                    Button("Open Plugins Folder") {
-                        try? FileManager.default.createDirectory(at: hub.pluginsURL, withIntermediateDirectories: true)
-                        NSWorkspace.shared.open(hub.pluginsURL)
+            } else {
+                Section {
+                    if !session.useTools {
+                        Label("Tools are off. Enable them in Settings → Tools to use connected tools.", systemImage: "info.circle")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    Button("Reload") { hub.reload() }
+                    let own = hub.servers.filter { $0.plugin == nil }
+                    if own.isEmpty {
+                        Text("Connect an MCP server to give the assistant extra tools. Choose Add Server to get started.").font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(own) { server in
+                        ServerRow(server: server, onRemove: { removing = server })
+                    }
+                    if let error = hub.configError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    HStack {
+                        Button("Add Server…") { adding = true }
+                        Button("Edit mcp.json") {
+                            hub.ensureConfigFile()
+                            NSWorkspace.shared.open(hub.configURL)
+                        }
+                        Spacer()
+                        Button("Reload") { hub.reload() }
+                            .help("Read mcp.json and the plugins again, and restart every server")
+                    }
+                    DisclosureGroup("Permissions, security and configuration") {
+                        Footer("Tools from Model Context Protocol servers, as programs on this Mac or web addresses. A tool that can change things asks you in the main window before it runs, and one that may delete or overwrite things asks every time. Read-only claims also ask until you explicitly trust the tool. Changed server settings or tool definitions revoke that trust. Only add servers you trust: a program you add here runs with your permissions. mcp.json uses the same mcpServers format as Claude Desktop, so you can paste a server from there. Anything you put in it, tokens too, is saved as plain text in ~/Library/Application Support/SpeakToMe.")
+                    }
+                } header: {
+                    Text("MCP servers")
+                } footer: {
+                    Footer("Connect a program on this Mac or a web address. Review permissions before trusting a tool.")
                 }
-            } header: {
-                Text("Plugins")
-            } footer: {
-                Footer("A plugin is a folder with a plugin.json that lists MCP servers to start, instructions for the model and how to announce its tools out loud. Plugins can run programs, so each one stays off until you switch it on. Reload detects manifest and instruction edits; executable files and dependencies are not verified.")
+
+                Section {
+                    if hub.plugins.isEmpty {
+                        Text("To install a plugin, add its folder to the Plugins folder, then reload. You can review it here before switching it on.").font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(hub.plugins) { plugin in
+                        PluginRow(plugin: plugin)
+                    }
+                    HStack {
+                        Button("Open Plugins Folder") {
+                            try? FileManager.default.createDirectory(at: hub.pluginsURL, withIntermediateDirectories: true)
+                            NSWorkspace.shared.open(hub.pluginsURL)
+                        }
+                        Spacer()
+                        Button("Reload") { hub.reload() }
+                    }
+                } header: {
+                    Text("Plugins")
+                } footer: {
+                    Footer("A plugin is a folder with a plugin.json that lists MCP servers to start, instructions for the model and how to announce its tools out loud. Plugins can run programs, so each one stays off until you switch it on. Reload detects manifest and instruction edits; executable files and dependencies are not verified.")
+                }
             }
         }
+        .onAppear { if !Snapshots.isRendering { hub.startOnce() } }
         .sheet(isPresented: $adding) { AddServerSheet() }
         .confirmationDialog("Remove \(removing?.name ?? "this server")?", isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } })) {

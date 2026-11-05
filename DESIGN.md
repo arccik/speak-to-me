@@ -269,7 +269,7 @@ Content hangs on a 22pt margin. The top bar is 30pt tall and shares the traffic 
 
 Opening the conversation brings the fog bank up from the bottom edge to 170pt from the top. The head shrinks to fit the band above it, centred, 134pt tall from 36pt down, and still talks; its ripples fade out as it shrinks. Your lines sit right in up to 400pt, replies sit left in up to 480pt, and rows are 18pt apart.
 
-Settings is fixed at 720 by 560pt with a 190pt sidebar and a 28pt header margin. The floating face is a 200 by 230pt transparent panel with a 150pt head and its text below.
+Settings is fixed at 900 by 680pt with a 230pt sidebar and a 28pt header margin. The floating face is a 200 by 230pt transparent panel with a 150pt head and its text below.
 
 ## Elevation & Depth
 
@@ -352,8 +352,11 @@ The head alone on a transparent, always-on-top panel with no window shadow, shar
 
 ### Settings
 Native macOS, in the style of System Settings: a sidebar of panes and grouped forms on the system window background, following the system appearance.
-- **Sidebar:** Standard list, with every symbol in cherry.
-- **Header:** Pane name in Didot 22pt, with a callout line of explanation below in secondary.
+- **Sidebar:** Native grouped list with 230pt reserved for readable category names, cherry symbols, a search field, and an automatic-save note. Groups: Get started (Start Here, AI Model), Conversation (Microphone & Listening, Voice & Language, Voice Cloning, Assistant & Replies), App (Appearance & Sounds, Keyboard Shortcuts, Conversation History), Extensions (Tools, Servers & Plugins).
+- **First visit:** Start Here links to model selection, microphone testing and voice selection in that order, then personality and shortcuts. Existing category raw values still restore the last visited pane.
+- **Search:** Match all typed words against category names, descriptions and task keywords; show category links with topic descriptions. No results offers examples and a clear-search action. Choosing a category clears search.
+- **Organization:** Listening owns sensitivity, turn timing and interruptions. Voice owns spoken output, speed, language and speech models. Assistant owns personality and prompt rules. General owns the floating face and sound cues. History owns local saved-conversation deletion. Tools owns the master switch and built-ins; Servers & Plugins owns external configuration and permissions. Technical audio and server details use native disclosure groups.
+- **Header:** Pane name in Didot 24pt, with a callout explanation below in secondary and a quiet divider. The header stays anchored at the top, including empty search results.
 - **Controls:** System toggles, sliders, pickers and buttons, tinted cherry.
 - **Personality chips:** Fully rounded 26pt tall chips, filled cherry with white text when selected, and primary at 7% otherwise. The no-pill stance covers the stage, not this pane.
 

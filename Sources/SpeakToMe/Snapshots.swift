@@ -167,7 +167,15 @@ enum Snapshots {
 
     /// Forms and lists are AppKit-backed, which ImageRenderer can't draw, so these go
     /// through a real (offscreen) window instead.
-    private static func renderSettings(to dir: URL) {
+    /// Capture the actual shipping settings size, in both appearances and search states.
+    static func runSettings(to directory: String) {
+        isRendering = true
+        let dir = URL(fileURLWithPath: directory)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        renderSettings(to: dir, compact: true)
+    }
+
+    private static func renderSettings(to dir: URL, compact: Bool = false) {
         let session = VoiceSession()
         session.models = [.init(id: "gemma-4-26b-a4b-it-4bit", sizeBytes: 16_108_266_064)]
         session.modelID = "gemma-4-26b-a4b-it-4bit"
@@ -175,26 +183,36 @@ enum Snapshots {
         session.showEngineForSnapshot(.f5Russian, for: .russian, state: .ready)
         session.showF5VoiceForSnapshot(.init(id: "sample", name: "Recording 1", transcript: VoiceSession.f5VoiceScript))
         let panes = SettingsView.Pane.allCases
+        let samples: [(pane: SettingsView.Pane, search: String, light: Bool, name: String)] =
+            panes.map { ($0, "", false, "settings-\($0.rawValue)") }
+            + (compact ? panes.map { ($0, "", true, "settings-\($0.rawValue)-light") }
+               + [(SettingsView.Pane.overview, "voice", false, "settings-search"),
+                  (.overview, "headphones", true, "settings-search-listening"),
+                  (.overview, "nonexistent-setting", false, "settings-search-empty")] : [])
         let original = UserDefaults.standard.string(forKey: "settingsPane")
-        SettingsView.height = 1050
-        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: 720, height: 1050),
+        let originalHeight = SettingsView.height
+        if !compact { SettingsView.height = 1050 }
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: 0, width: SettingsView.width, height: SettingsView.height),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .darkAqua)
 
         func capture(_ index: Int) {
-            guard index < panes.count else {
+            guard index < samples.count else {
                 UserDefaults.standard.set(original, forKey: "settingsPane")
+                SettingsView.height = originalHeight
                 exit(0)
             }
-            UserDefaults.standard.set(panes[index].rawValue, forKey: "settingsPane")
-            window.contentView = NSHostingView(rootView: SettingsView().environment(session))
+            let sample = samples[index]
+            window.appearance = NSAppearance(named: sample.light ? .aqua : .darkAqua)
+            UserDefaults.standard.set(sample.pane.rawValue, forKey: "settingsPane")
+            window.contentView = NSHostingView(rootView: SettingsView(initialSearch: sample.search).environment(session))
             window.orderFrontRegardless()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 MainActor.assumeIsolated {
                     if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                         view.cacheDisplay(in: view.bounds, to: rep)
                         try? rep.representation(using: .png, properties: [:])?
-                            .write(to: dir.appendingPathComponent("settings-\(panes[index].rawValue).png"))
+                            .write(to: dir.appendingPathComponent("\(sample.name).png"))
                     }
                     capture(index + 1)
                 }

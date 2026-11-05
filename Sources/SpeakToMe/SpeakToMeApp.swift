@@ -7,6 +7,11 @@ struct SpeakToMeApp: App {
 
     init() {
         let args = CommandLine.arguments
+        if let flag = args.firstIndex(of: "--settings-snapshot"), args.indices.contains(flag + 1) {
+            let dir = args[flag + 1]
+            Task { @MainActor in Snapshots.runSettings(to: dir) }
+            return
+        }
         if let flag = args.firstIndex(of: "--snapshot"), args.indices.contains(flag + 1) {
             let dir = args[flag + 1]
             Task { @MainActor in Snapshots.run(to: dir) }

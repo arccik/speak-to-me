@@ -3,84 +3,279 @@ import SwiftUI
 
 /// Settings as a sidebar of panes, in the style of System Settings.
 struct SettingsView: View {
+    // Keep existing raw values so previously selected categories still restore.
     enum Pane: String, CaseIterable, Identifiable {
-        case general, shortcuts, voice, cloning, conversation, tools, model
+        case overview, model, listening, voice, cloning, conversation, general, shortcuts, history, tools, connections
 
         var id: Self { self }
-        var title: String { self == .cloning ? "Voice Cloning" : rawValue.capitalized }
+        var title: String {
+            switch self {
+            case .overview: return "Start Here"
+            case .model: return "AI Model"
+            case .listening: return "Microphone & Listening"
+            case .voice: return "Voice & Language"
+            case .cloning: return "Voice Cloning"
+            case .conversation: return "Assistant & Replies"
+            case .general: return "Appearance & Sounds"
+            case .shortcuts: return "Keyboard Shortcuts"
+            case .history: return "Conversation History"
+            case .tools: return "Tools"
+            case .connections: return "Servers & Plugins"
+            }
+        }
 
         var subtitle: String {
             switch self {
-            case .general: return "Sounds, the floating face and your history"
-            case .shortcuts: return "Talk or bring up the face from any app"
-            case .voice: return "Which model speaks each language, and how"
-            case .cloning: return "Hear replies in a voice you record"
-            case .conversation: return "Turn-taking and the system prompt"
-            case .tools: return "Built-in tools, MCP servers and plugins"
-            case .model: return "The language model in oMLX"
+            case .overview: return "A few simple steps to make Speak to Me yours."
+            case .model: return "Choose the AI that writes your replies."
+            case .listening: return "Help the mic hear you and set when the assistant responds."
+            case .voice: return "Choose how replies sound and which language to use."
+            case .cloning: return "Record or import a voice for English or Russian replies."
+            case .conversation: return "Choose the assistant’s personality and instructions."
+            case .general: return "Manage the floating face and microphone sounds."
+            case .shortcuts: return "Control conversations from this window or any app."
+            case .history: return "Manage conversations saved on this Mac."
+            case .tools: return "Choose what the assistant can do beyond replying."
+            case .connections: return "Connect extra tools through MCP servers and plugins."
+            }
+        }
+
+        var topics: [String] {
+            switch self {
+            case .overview: return ["First-time setup", "Getting started"]
+            case .model: return ["Chat model", "oMLX server", "Memory and keep loaded", "Reply latency"]
+            case .listening: return ["Microphone sensitivity and test", "Pause before replying", "Interrupt replies", "Echo cancellation", "Headphones"]
+            case .voice: return ["Speak replies out loud", "Mute reply audio", "Speaking speed", "Language detection", "English Kokoro PocketTTS", "Russian F5-TTS", "Other languages Supertonic macOS", "Expressive voice", "Pronunciation and word stress"]
+            case .cloning: return ["Record a voice", "Import an audio file", "English PocketTTS", "Russian F5-TTS", "Rename or delete recordings", "Transcript"]
+            case .conversation: return ["Personality presets", "Friendly Concise Tutor Playful", "System prompt", "Custom instructions"]
+            case .general: return ["Floating face", "Show face with talk shortcut", "Microphone sound cues and beeps"]
+            case .shortcuts: return ["Global hotkeys", "Keyboard controls", "Start or stop talking", "Mute microphone", "Type a message"]
+            case .history: return ["Saved conversations", "Local storage and privacy", "Delete all conversations"]
+            case .tools: return ["Enable tools", "Web search", "Read web pages", "Check time", "Open apps and URLs"]
+            case .connections: return ["MCP servers", "Add server", "Edit mcp.json", "Plugins folder", "Tool permissions and trust", "Reload connections"]
             }
         }
 
         var icon: String {
             switch self {
-            case .general: return "gearshape.fill"
-            case .shortcuts: return "command"
+            case .overview: return "hand.wave"
+            case .model: return "cpu"
+            case .listening: return "mic"
             case .voice: return "waveform"
-            case .cloning: return "person.wave.2.fill"
-            case .conversation: return "bubble.left.and.bubble.right.fill"
-            case .tools: return "wrench.and.screwdriver.fill"
-            case .model: return "cpu.fill"
+            case .cloning: return "person.wave.2"
+            case .conversation: return "bubble.left.and.bubble.right"
+            case .general: return "macwindow"
+            case .shortcuts: return "command"
+            case .history: return "clock.arrow.circlepath"
+            case .tools: return "wrench.and.screwdriver"
+            case .connections: return "puzzlepiece.extension"
+            }
+        }
+
+        func matches(_ query: String) -> Bool {
+            let text = ([title, subtitle] + topics).joined(separator: " ")
+            return query.split(whereSeparator: { $0.isWhitespace }).allSatisfy {
+                text.localizedStandardContains(String($0))
             }
         }
     }
 
-    /// Taller for Snapshots, so a whole pane fits in the picture.
-    static var height: CGFloat = 560
+    static let groups: [(String, [Pane])] = [
+        ("Get started", [.overview, .model]),
+        ("Conversation", [.listening, .voice, .cloning, .conversation]),
+        ("App", [.general, .shortcuts, .history]),
+        ("Extensions", [.tools, .connections]),
+    ]
+    static var height: CGFloat = 680
+    static let width: CGFloat = 900
 
-    @AppStorage("settingsPane") private var pane: Pane = .general
+    @AppStorage("settingsPane") private var pane: Pane = .overview
+    @State private var search = ""
+    @FocusState private var searchFocused: Bool
+
+    init(initialSearch: String = "") {
+        _search = State(initialValue: initialSearch)
+    }
+
+    private var query: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var results: [Pane] { Pane.allCases.filter { $0.matches(query) } }
+
+    private func navigate(to destination: Pane) {
+        pane = destination
+        search = ""
+        searchFocused = false
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(Pane.allCases, selection: Binding(get: { pane }, set: { if let p = $0 { pane = p } })) { pane in
-                Label {
-                    Text(pane.title)
-                } icon: {
-                    Image(systemName: pane.icon).foregroundStyle(Theme.accent)
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search settings", text: $search)
+                        .textFieldStyle(.plain)
+                        .focused($searchFocused)
+                        .onExitCommand { search = ""; searchFocused = false }
+                    if !search.isEmpty {
+                        Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Clear settings search")
+                    }
                 }
-                .padding(.vertical, 2)
+                .padding(8)
+                .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
+                .padding(12)
+                List(selection: Binding<Pane?>(get: { query.isEmpty ? pane : nil }, set: {
+                    if let destination = $0 { navigate(to: destination) }
+                })) {
+                    ForEach(Self.groups, id: \.0) { group in
+                        Section(group.0) {
+                            ForEach(group.1) { destination in
+                                Label {
+                                    Text(destination.title)
+                                } icon: {
+                                    Image(systemName: destination.icon).foregroundStyle(Theme.accent)
+                                }
+                                .padding(.vertical, 3)
+                                .tag(destination)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+                Text("Changes save automatically")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(14)
             }
-            .navigationSplitViewColumnWidth(190)
+            .frame(minWidth: 230, maxWidth: 230)
+            .navigationSplitViewColumnWidth(230)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             VStack(alignment: .leading, spacing: 0) {
-                // The pane's name, set large, and one line of explanation, above the form.
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(pane.title).font(.display(22))
-                    Text(pane.subtitle).font(.callout).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(query.isEmpty ? pane.title : "Search Settings").font(.display(24))
+                    Text(query.isEmpty ? pane.subtitle : "Find a category by name or by what you want to change.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 28)
-                .padding(.top, 18)
-                .padding(.bottom, 4)
+                .padding(.top, 22)
+                .padding(.bottom, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                Divider().padding(.horizontal, 28)
                 Group {
-                switch pane {
-                case .general: GeneralPane()
-                case .shortcuts: ShortcutsPane()
-                case .voice: VoicePane()
-                case .cloning: VoiceCloningPane()
-                case .conversation: ConversationPane()
-                case .tools: ToolsPane()
-                case .model: ModelPane()
+                    if !query.isEmpty {
+                        searchResults
+                    } else {
+                        switch pane {
+                        case .overview: OverviewPane(navigate: navigate)
+                        case .general: GeneralPane()
+                        case .shortcuts: ShortcutsPane()
+                        case .listening: ListeningPane()
+                        case .voice: VoicePane()
+                        case .cloning: VoiceCloningPane()
+                        case .conversation: ConversationPane()
+                        case .history: HistoryPane()
+                        case .tools: ToolsPane()
+                        case .connections: ToolsPane(connections: true)
+                        case .model: ModelPane()
+                        }
+                    }
                 }
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .id(query.isEmpty ? pane.rawValue : "search")
                 .formStyle(.grouped)
                 .scrollContentBackground(.hidden)
             }
             .background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle(pane.title)
+            .navigationTitle("Settings")
         }
-        .frame(width: 720, height: Self.height)
+        .navigationSplitViewStyle(.balanced)
+        .frame(width: Self.width, height: Self.height)
         .tint(Theme.accent)
+    }
+
+    private var searchResults: some View {
+        Group {
+            if results.isEmpty {
+                ContentUnavailableView {
+                    Label("No Settings Found", systemImage: "magnifyingglass")
+                } description: {
+                    Text("Try a word like “voice”, “microphone”, “shortcut” or “server”.")
+                } actions: {
+                    Button("Clear Search") { search = ""; searchFocused = true }
+                }
+            } else {
+                Form {
+                    Section("\(results.count) matching \(results.count == 1 ? "category" : "categories")") {
+                        ForEach(results) { destination in
+                            SettingsLink(destination: destination, detail: destination.topics.joined(separator: " · ")) {
+                                navigate(to: destination)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct SettingsLink: View {
+    let destination: SettingsView.Pane
+    let detail: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: destination.icon)
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(destination.title).fontWeight(.medium).foregroundStyle(.primary)
+                    Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct OverviewPane: View {
+    @Environment(VoiceSession.self) private var session
+    let navigate: (SettingsView.Pane) -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                SettingsLink(destination: .model,
+                             detail: session.models.isEmpty ? "Start oMLX with a chat model, then choose it here." : "Selected: \(session.modelID)") { navigate(.model) }
+                SettingsLink(destination: .listening, detail: "Test your mic and choose how long to pause before a reply.") { navigate(.listening) }
+                SettingsLink(destination: .voice, detail: "Pick a voice, preview it, and set the reply language.") { navigate(.voice) }
+            } header: {
+                Text("Set up your first conversation")
+            } footer: {
+                Footer("Already happy with the defaults? Click the main window or press Space to start talking.")
+            }
+            Section("Make it yours") {
+                SettingsLink(destination: .conversation, detail: "Try a personality or write your own instructions.") { navigate(.conversation) }
+                SettingsLink(destination: .shortcuts, detail: "Set a shortcut to talk from any app.") { navigate(.shortcuts) }
+            }
+            Section {
+                Text("Speech recognition, the AI model and speech synthesis run on your Mac. Web tools and connected servers can send data outside it.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } header: {
+                Text("Your data")
+            }
+        }
     }
 }
 
@@ -106,13 +301,15 @@ private struct LabeledSlider<V: BinaryFloatingPoint>: View where V.Stride: Binar
             // Snapped by hand: a stepped Slider draws a tick for every step.
             Slider(value: Binding(get: { value }, set: { value = ($0 / V(step)).rounded() * V(step) }), in: range)
                 .labelsHidden()
+                .accessibilityLabel(title)
+                .accessibilityValue(format(value))
             HStack {
                 Text(low)
                 Spacer()
                 Text(high)
             }
             .font(.caption)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
         }
     }
 }
@@ -137,14 +334,12 @@ private struct GeneralPane: View {
     @Environment(VoiceSession.self) private var session
     @AppStorage("orbOnHotKey") private var orbOnHotKey = true
     @State private var orbVisible = MiniOrbController.shared.isVisible
-    @State private var confirmDelete = false
 
     var body: some View {
         @Bindable var session = session
         Form {
-            Section("Sounds") {
+            Section("Microphone sounds") {
                 Toggle("Play a sound when the mic turns on and off", isOn: $session.soundCues)
-                Toggle("Speak replies out loud", isOn: Binding(get: { !session.muteReplies }, set: { session.muteReplies = !$0 }))
             }
             Section {
                 Toggle("Show the floating face", isOn: $orbVisible)
@@ -157,6 +352,17 @@ private struct GeneralPane: View {
             } footer: {
                 Footer("A small always-on-top face you can drag anywhere. Click it to start or stop, right-click for options.")
             }
+        }
+        .onAppear { orbVisible = MiniOrbController.shared.isVisible }
+    }
+}
+
+private struct HistoryPane: View {
+    @Environment(VoiceSession.self) private var session
+    @State private var confirmDelete = false
+
+    var body: some View {
+        Form {
             Section {
                 LabeledContent("Saved conversations") {
                     Text("\(session.savedConversations.count)").monospacedDigit()
@@ -174,7 +380,6 @@ private struct GeneralPane: View {
                 Footer("Conversations are saved on this Mac only.")
             }
         }
-        .onAppear { orbVisible = MiniOrbController.shared.isVisible }
     }
 }
 
@@ -252,22 +457,24 @@ private struct VoicePane: View {
     var body: some View {
         @Bindable var session = session
         Form {
-            ForEach(SpeechSlot.allCases) { LanguageSection(slot: $0) }
             Section {
+                Toggle("Speak replies out loud", isOn: Binding(get: { !session.muteReplies }, set: { session.muteReplies = !$0 }))
                 LabeledSlider(title: "Speaking speed", value: $session.speed, range: 0.8...1.4, step: 0.05,
                               low: "Slower", high: "Faster") { String(format: "%.2f×", Double($0)) }
                 Toggle("Answer in the language I speak", isOn: $session.matchLanguage)
                 LabeledContent("Current language", value: LanguageDetector.name(session.language))
             } header: {
-                Text("Playback")
+                Text("Reply voice and language")
             } footer: {
                 Footer("Model changes apply from the next reply. If a model can't speak a sentence, the next available one does.")
             }
-            Section {
+            Section("Expression") {
                 Toggle("Expressive voice", isOn: $session.expressiveVoice)
-            } footer: {
-                Footer("Lets the language model add pauses and change the speed of its voice, with any speech model and in any language. Applies from the next reply.")
+                DisclosureGroup("How expressive voice works") {
+                    Footer("Lets the AI add pauses and change speaking speed in any language. Applies from the next reply.")
+                }
             }
+            ForEach(SpeechSlot.allCases) { LanguageSection(slot: $0) }
         }
     }
 }
@@ -302,9 +509,9 @@ private struct LanguageSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Model") {
+            LabeledContent("Speech model") {
                 HStack(spacing: 8) {
-                    Picker("Model", selection: Binding(get: { engine }, set: { session.setEngine($0, for: slot) })) {
+                    Picker("Speech model", selection: Binding(get: { engine }, set: { session.setEngine($0, for: slot) })) {
                         ForEach(slot.engines) { option in
                             Text(option.name)
                                 .tag(option)
@@ -661,6 +868,41 @@ private struct EnglishCloningSection: View {
     }
 }
 
+// MARK: - Listening
+
+private struct ListeningPane: View {
+    @Environment(VoiceSession.self) private var session
+
+    private var endOfTurn: Binding<Double> {
+        Binding(get: { Double(session.endOfTurnMs) }, set: { session.endOfTurnMs = Int($0) })
+    }
+
+    var body: some View {
+        @Bindable var session = session
+        Form {
+            Section {
+                LabeledSlider(title: "Wait after I stop speaking", value: endOfTurn, range: 256...2048, step: 128,
+                              low: "Snappy", high: "Patient") { "\(Int($0)) ms" }
+            } header: {
+                Text("When to reply")
+            } footer: {
+                Footer("Shorter feels snappier; longer gives you time to think mid-sentence.")
+            }
+            MicSensitivitySection()
+            Section {
+                Toggle("Let me interrupt replies without headphones", isOn: $session.echoCancellation)
+                DisclosureGroup("How interruptions affect audio") {
+                    Footer("Echo cancellation removes the assistant’s voice from the mic. macOS lowers other apps’ audio while it runs. After 45 quiet seconds it stops, so the next reply takes about 2 seconds longer to start. When off, the mic pauses during replies. Changes apply the next time you start talking.")
+                }
+            } header: {
+                Text("Interruptions")
+            } footer: {
+                Footer("Speak while the assistant is talking to interrupt it, even on speakers.")
+            }
+        }
+    }
+}
+
 // MARK: - Conversation
 
 private struct ConversationPane: View {
@@ -675,27 +917,9 @@ private struct ConversationPane: View {
         ("Playful", "sparkles", "You are a witty, playful voice companion. Keep answers short and fun, with light humour, while still being genuinely helpful." + rule),
     ]
 
-    private var endOfTurn: Binding<Double> {
-        Binding(get: { Double(session.endOfTurnMs) }, set: { session.endOfTurnMs = Int($0) })
-    }
-
     var body: some View {
         @Bindable var session = session
         Form {
-            Section {
-                LabeledSlider(title: "Reply after a pause of", value: endOfTurn, range: 256...2048, step: 128,
-                              low: "Snappy", high: "Patient") { "\(Int($0)) ms" }
-            } header: {
-                Text("Turn-taking")
-            } footer: {
-                Footer("Shorter feels snappier; longer gives you time to think mid-sentence.")
-            }
-            MicSensitivitySection()
-            Section {
-                Toggle("Let me interrupt replies without headphones", isOn: $session.echoCancellation)
-            } footer: {
-                Footer("Cancels the assistant's voice from the mic so you can talk over it. It stays on while you talk back and forth, and macOS turns down other apps' sound while it runs. After 45 quiet seconds it lets go, and the next reply takes about 2 seconds longer to start. When off, the mic pauses while a reply plays. Takes effect the next time you start talking.")
-            }
             Section {
                 HStack(spacing: 8) {
                     ForEach(Self.presets, id: \.name) { preset in
@@ -757,10 +981,10 @@ private struct ConversationPane: View {
                     }
                 }
             } header: {
-                Text("System prompt")
+                Text("Personality and instructions")
             } footer: {
                 Footer(session.addsPromptRules
-                    ? "Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (Tools pane), answering in your language and expressive voice (Voice pane), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply."
+                    ? "Your system prompt comes first. After it the app adds its own rules for what's switched on: how to use tools (Tools), answering in your language and expressive voice (Voice & Language), so those keep working whatever you write. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply."
                     : "The text above is the entire system prompt. Keep the no-markdown rule: everything is read aloud. Changes apply from the next reply; start a new conversation (⌘N) if replies keep echoing the old style.")
             }
         }
@@ -905,6 +1129,7 @@ private struct PresetChip: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -933,12 +1158,13 @@ private struct ModelPane: View {
                         }
                     }
                 }
-                LabeledContent("Server", value: session.serverAddress)
+                LabeledContent("oMLX server", value: session.serverAddress)
+                    .textSelection(.enabled)
                 if let ms = session.lastLatencyMs {
                     LabeledContent("Last reply started after", value: "\(ms) ms")
                 }
             } footer: {
-                Footer("Mixture-of-experts models (names with a3b or a4b) reply fastest. The server address comes from ~/.omlx/settings.json.")
+                Footer("Start oMLX and load a chat model to make it available here. The server address comes from ~/.omlx/settings.json. Models with a3b or a4b in the name usually reply fastest.")
             }
             Section {
                 Toggle("Keep the model loaded in oMLX", isOn: $session.keepModelLoaded)

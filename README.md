@@ -44,7 +44,9 @@ Speak to Me is a native macOS app that turns any chat model served by [oMLX](htt
 
 ## Speech models
 
-Choose a model for each language group in **Settings → Voice**. Switching takes effect from the next reply, and if a model can't say a sentence, the next available one does.
+Settings opens with **Start Here**, a short guide to choosing an AI model, testing your mic and picking a reply voice. Categories are grouped into Get started, Conversation, App and Extensions. Use **Search settings** to find options by task, such as “speed”, “headphones” or “record a voice”. Changes save automatically.
+
+Choose a model for each language group in **Settings → Voice & Language**. Switching takes effect from the next reply, and if a model can't say a sentence, the next available one does.
 
 | Model | Languages | Good to know |
 |---|---|---|
@@ -96,7 +98,7 @@ To keep the microphone permission across rebuilds, sign in to Xcode with an Appl
 | Action | How |
 |---|---|
 | Start or stop talking | Click anywhere in the window, or <kbd>Space</kbd> |
-| Talk from any app | <kbd>⌥</kbd><kbd>Space</kbd> (change it in Settings → Shortcuts) |
+| Talk from any app | <kbd>⌥</kbd><kbd>Space</kbd> (change it in Settings → Keyboard Shortcuts) |
 | Interrupt a reply | Just start talking |
 | Stop a reply | <kbd>Esc</kbd> |
 | Mute the mic | <kbd>M</kbd> |
@@ -108,7 +110,7 @@ To keep the microphone permission across rebuilds, sign in to Xcode with an Appl
 
 ## Tools, MCP and plugins
 
-Settings → Tools lists every tool the model can use, each with its own switch.
+Settings → Tools controls built-in tools. Settings → Servers & Plugins manages MCP servers, plugins and their tool permissions.
 
 **MCP servers.** Click **Add Server…** and give either a command, such as `npx -y @modelcontextprotocol/server-filesystem ~/Documents`, or a web address for a remote server. Servers are saved in `~/Library/Application Support/SpeakToMe/mcp.json`, in the same `mcpServers` format as Claude Desktop, so you can paste servers from there:
 
@@ -145,7 +147,7 @@ Commands are found through your login shell's `PATH`, so `npx`, `uvx` and Homebr
 - **Built-in tools can't change your files.** They can only search, read web pages, tell the time, and open apps or http(s) links.
 - **MCP tools ask first by default.** Before a tool runs, a card shows its actual tool name, server and full arguments, and waits for **Allow**. Talking over it, or no answer in 2 minutes, counts as no.
 - **Tools that may delete or overwrite ask every time.** MCP treats every tool this way unless its server says otherwise, and this can't be switched off.
-- **Read-only claims need your trust.** MCP tools ask first until you explicitly turn off asking for that tool in Settings → Tools. Tools marked as potentially destructive always ask. Permission grants reset when the server configuration or tool definition changes.
+- **Read-only claims need your trust.** MCP tools ask first until you explicitly turn off asking for that tool in Settings → Servers & Plugins. Tools marked as potentially destructive always ask. Permission grants reset when the server configuration or tool definition changes.
 - **Plugins stay off until you switch them on.** On Reload, changes to `plugin.json` or `instructions.md` turn the plugin off. Executables and their dependencies are not verified; only enable plugins you trust.
 - **Programs you add get only a minimal environment.** Remote servers must use https unless they're on this Mac.
 - **Only add servers you trust.** A program you add runs with your permissions.
@@ -185,7 +187,7 @@ Issues and pull requests are welcome, and reports from other Macs are especially
 
 1. Build with `scripts/build-app.sh`.
 2. Run the self tests that apply, listed in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#tests-and-diagnostics).
-3. For a visual change, render the window with `--snapshot` and include the images.
+3. For a visual change, render the window with `--snapshot` and include the images. Use `--settings-snapshot <dir>` to capture all settings categories at their shipping size in light and dark appearance, plus search results and the empty state.
 
 ## License
 
